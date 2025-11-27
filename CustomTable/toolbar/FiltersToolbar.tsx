@@ -273,7 +273,14 @@ export default function FiltersToolbar({
             onClose={handleViewMenuClose}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
             transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+            disablePortal={false}
+            slotProps={{
+              root: {
+                style: { zIndex: 99999 }
+              }
+            }}
             sx={{
+              zIndex: 99999,
               '& .MuiPaper-root': {
                 backgroundColor: isDarkMode ? 'oklch(0.18 0.01 240)' : '#ffffff',
                 border: `1px solid ${isDarkMode ? 'oklch(0.25 0.02 240)' : '#e5e7eb'}`,

@@ -710,42 +710,40 @@ export default function TableView({
             isDarkMode={isDarkMode}
           />
         </table>
-
-        <ColumnFilterPopover
-          anchorEl={anchorEl}
-          menuColumnId={menuColumnId}
-          handleCloseMenu={handleCloseMenu}
-          columnFilters={columnFilters}
-          updateColumnFilter={updateColumnFilter}
-          originalColumnsDef={originalColumnsDef}
-        />
-
-        <ContextualMenu
-          contextMenu={contextMenu}
-          handleCloseContextMenu={handleCloseContextMenu}
-          handleCopyFromMenu={handleCopyFromMenu}
-          clickedHeaderIndex={clickedHeaderIndex}
-          onHideColumns={onHideColumns}
-          handleHideColumn={handleHideColumn}
-          clickedRowIndex={clickedRowIndex}
-          onHideRows={onHideRows}
-          handleHideRow={handleHideRow}
-        />
       </Box>
 
       <Box
         sx={{
-          position: 'sticky',
-          bottom: 0,
-          left: 0,
+          flexShrink: 0,
           backgroundColor: 'var(--color-bg-paper)',
           borderTop: `1px solid var(--color-divider)`,
           zIndex: 10,
-          p: '8px',
         }}
       >
         <Pagination table={table} />
       </Box>
+
+      {/* Modales/Popovers FUERA del contenedor scrollable para evitar problemas de overflow */}
+      <ColumnFilterPopover
+        anchorEl={anchorEl}
+        menuColumnId={menuColumnId}
+        handleCloseMenu={handleCloseMenu}
+        columnFilters={columnFilters}
+        updateColumnFilter={updateColumnFilter}
+        originalColumnsDef={originalColumnsDef}
+      />
+
+      <ContextualMenu
+        contextMenu={contextMenu}
+        handleCloseContextMenu={handleCloseContextMenu}
+        handleCopyFromMenu={handleCopyFromMenu}
+        clickedHeaderIndex={clickedHeaderIndex}
+        onHideColumns={onHideColumns}
+        handleHideColumn={handleHideColumn}
+        clickedRowIndex={clickedRowIndex}
+        onHideRows={onHideRows}
+        handleHideRow={handleHideRow}
+      />
     </Box>
   );
 }

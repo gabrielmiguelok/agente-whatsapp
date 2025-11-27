@@ -559,11 +559,12 @@ export default function Home() {
           {activeTab === 'contacts' && (
             <motion.div
               key="contacts"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ transform: 'none' }}
             >
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden" style={{ height: 'calc(100vh - 180px)' }}>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl" style={{ height: 'calc(100vh - 180px)' }}>
                 {isHydrated && (
                   <CustomTable
                     data={data}
@@ -585,11 +586,12 @@ export default function Home() {
           {activeTab === 'messages' && (
             <motion.div
               key="messages"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ transform: 'none' }}
             >
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden" style={{ height: 'calc(100vh - 180px)' }}>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl" style={{ height: 'calc(100vh - 180px)' }}>
                 {isHydrated && (
                   <CustomTable
                     data={data}
@@ -611,9 +613,10 @@ export default function Home() {
           {activeTab === 'users' && (
             <motion.div
               key="users"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ transform: 'none' }}
             >
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Usuarios del Sistema</h2>
@@ -621,7 +624,7 @@ export default function Home() {
                   Administrá los usuarios y sus permisos. Cambiá el rol a "admin" para otorgar acceso completo.
                 </p>
               </div>
-              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden" style={{ height: 'calc(100vh - 280px)' }}>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl" style={{ height: 'calc(100vh - 280px)' }}>
                 {isHydrated && (
                   <CustomTable
                     data={users}

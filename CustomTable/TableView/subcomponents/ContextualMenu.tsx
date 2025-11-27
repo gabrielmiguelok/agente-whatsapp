@@ -64,6 +64,13 @@ export default function ContextualMenu({
           ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
           : undefined
       }
+      disablePortal={false}
+      slotProps={{
+        root: {
+          style: { zIndex: 99999 }
+        }
+      }}
+      sx={{ zIndex: 99999 }}
       PaperProps={{
         sx: {
           bgcolor: C.paper,

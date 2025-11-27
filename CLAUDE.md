@@ -20,9 +20,11 @@ pnpm start            # Production server (port 4444)
 pnpm lint             # ESLint
 ```
 
-## Production URL
+## Production
 
-**https://crm.onia.agency** (puerto 4444)
+- **URL:** https://crm.onia.agency
+- **Puerto:** 4444
+- **PM2 name:** crm-onia
 
 ## Architecture
 
@@ -556,6 +558,21 @@ Panel de administración con CustomTable mostrando usuarios del sistema:
 
 ## Critical: Don't Break
 
+### CSS/Layout Rules
+
+**IMPORTANTE: Framer Motion + position:fixed**
+- NO usar animaciones con `transform` (como `y: 20`) en contenedores que tienen dropdowns/modales
+- `transform` en un ancestro rompe `position: fixed` de los portales (bug conocido de CSS)
+- Usar solo animaciones de `opacity` cuando hay CustomTable con dropdowns editables
+- Agregar `style={{ transform: 'none' }}` a motion.div que contienen CustomTable
+
+**Contenedores con CustomTable**
+- NO usar `overflow-hidden` en contenedores wrapper de CustomTable
+- Los modales (ColumnFilterPopover, ContextualMenu, CustomSelectDropdown) usan Portal con zIndex 99999
+- El toolbar del CustomTable tiene zIndex 9999
+
+### Code Rules
+
 1. **Method signatures** in `DataStore`, `SequenceEngine`, `WhatsAppClient`, `AIConversation`
 2. **DB column names** hardcoded in models (zona, accion, presupuesto)
 3. **Dedup key format**: `WA:{id}` or `GEN:{hash}`
@@ -581,18 +598,18 @@ Panel de administración con CustomTable mostrando usuarios del sistema:
 # Base de datos
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=emprendi2
-DB_PASSWORD=56Ghambju!
+DB_USER=<db_user>
+DB_PASSWORD=<db_password>
 DB_NAME=crm_onia
 
 # Aplicación
 NEXT_PUBLIC_BASE_URL=https://crm.onia.agency
-OPENAI_API_KEY=                   # Para conversaciones con IA
+OPENAI_API_KEY=<openai_key>       # Para conversaciones con IA
 
 # Autenticación
-JWT_SECRET=crm-onia-jwt-secret-2024-secure
-DEFAULT_ADMIN_EMAIL=              # Email del admin por defecto
-DEFAULT_ADMIN_PASSWORD=           # Password del admin por defecto
+JWT_SECRET=<jwt_secret>
+DEFAULT_ADMIN_EMAIL=<admin_email>
+DEFAULT_ADMIN_PASSWORD=<admin_password>
 ```
 
 ## Database Access

@@ -23,11 +23,10 @@ export default function Pagination({ table }: { table: any }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        p: '2px 4px',
+        p: '6px 12px',
         backgroundColor: 'var(--color-bg-paper)',
         color: 'var(--color-text)',
-        mt: 1,
-        minHeight: '32px',
+        minHeight: '36px',
       }}
     >
       <Typography variant="caption" sx={{ fontWeight: 500, mr: 0.5 }}>

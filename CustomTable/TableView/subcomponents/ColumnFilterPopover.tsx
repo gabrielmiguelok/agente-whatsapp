@@ -26,6 +26,13 @@ export default function ColumnFilterPopover({
       onClose={handleCloseMenu}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      disablePortal={false}
+      slotProps={{
+        root: {
+          style: { zIndex: 99999 }
+        }
+      }}
+      sx={{ zIndex: 99999 }}
     >
       <ColumnFilterConfiguration
         menuColumnId={menuColumnId || undefined}
