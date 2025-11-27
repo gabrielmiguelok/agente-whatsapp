@@ -42,8 +42,25 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET)
-    const role = payload.role as string
+    await jwtVerify(token, JWT_SECRET)
+
+    const verifyUrl = new URL("/api/auth/verify", request.url)
+    const verifyResponse = await fetch(verifyUrl.toString(), {
+      headers: {
+        Cookie: `${COOKIE_NAME}=${token}`,
+      },
+    })
+
+    if (!verifyResponse.ok) {
+      const loginUrl = new URL("/login", request.url)
+      loginUrl.searchParams.set("next", pathname)
+      const response = NextResponse.redirect(loginUrl)
+      response.cookies.delete(COOKIE_NAME)
+      return response
+    }
+
+    const { user } = await verifyResponse.json()
+    const role = user?.role
 
     if (role !== "admin") {
       if (isUserAllowedPath(pathname)) {
