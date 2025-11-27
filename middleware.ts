@@ -6,9 +6,14 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "crm-onia-
 const COOKIE_NAME = "auth_token"
 
 const PUBLIC_PATHS = ["/login", "/api/auth"]
+const USER_ALLOWED_PATHS = ["/no-autorizado", "/api/auth"]
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
+}
+
+function isUserAllowedPath(pathname: string): boolean {
+  return USER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
 }
 
 function isStaticAsset(pathname: string): boolean {
@@ -37,7 +42,20 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    await jwtVerify(token, JWT_SECRET)
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    const role = payload.role as string
+
+    if (role !== "admin") {
+      if (isUserAllowedPath(pathname)) {
+        return NextResponse.next()
+      }
+      return NextResponse.redirect(new URL("/no-autorizado", request.url))
+    }
+
+    if (pathname === "/no-autorizado" && role === "admin") {
+      return NextResponse.redirect(new URL("/", request.url))
+    }
+
     return NextResponse.next()
   } catch {
     const loginUrl = new URL("/login", request.url)

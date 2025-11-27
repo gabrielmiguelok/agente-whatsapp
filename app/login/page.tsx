@@ -27,7 +27,7 @@ function isAdminPath(p?: string | null): boolean {
   return !!p && p.startsWith("/admin")
 }
 function defaultDestForRole(role?: string | null): string {
-  return role === "admin" ? "/admin/dashboard" : "/"
+  return role === "admin" ? "/" : "/no-autorizado"
 }
 function resolveDest(role: string | null | undefined, nextParam?: string | null): string {
   if (isInternalPath(nextParam) && nextParam !== "/login") {
@@ -185,7 +185,7 @@ function LoginClient() {
               <CardHeader className="space-y-4 pb-6">
                 <div className="text-center">
                   <CardTitle className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                    {isLogin ? "¡Bienvenido de vuelta!" : "Crear cuenta"}
+                    {isLogin ? "Bienvenido" : "Crear cuenta"}
                   </CardTitle>
                   <CardDescription className="text-gray-600 mt-2">
                     {isLogin ? "Inicia sesión para continuar" : "Crea tu cuenta para comenzar"}

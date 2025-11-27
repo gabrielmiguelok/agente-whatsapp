@@ -500,6 +500,38 @@ Definidas en `middleware.ts`:
 - `/api/auth/*`
 - Assets estáticos (`/_next`, `.ico`, etc.)
 
+### Control de Acceso por Rol
+
+```
+Usuario accede a ruta protegida
+    ↓
+middleware.ts verifica JWT
+    ├── role === 'admin' → acceso completo
+    └── role === 'user' → redirect /no-autorizado
+```
+
+**Rutas para usuarios no-admin:**
+- `/no-autorizado` - Página informativa con opción de verificar permisos
+- `/api/auth/*` - APIs de auth (logout, verify)
+
+### API de Usuarios (`/api/users`)
+
+```
+GET    /api/users           # Lista todos los usuarios (solo campos seguros)
+POST   /api/users           # Crear usuario { email, password, first_name, last_name, role }
+PUT    /api/users           # Actualizar { id, field, value }
+DELETE /api/users?id=X      # Eliminar usuario
+```
+
+**Campos editables:** `email`, `first_name`, `last_name`, `full_name`, `role`
+
+### Página Principal (`/`)
+
+Panel de administración con CustomTable mostrando usuarios del sistema:
+- Columna `role` tipo badge con colores (admin/user)
+- Click para cambiar rol directamente desde la tabla
+- Solo accesible para usuarios con rol `admin`
+
 ## Database Tables
 
 **Base de datos:** `crm_onia`
