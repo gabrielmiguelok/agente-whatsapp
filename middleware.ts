@@ -5,15 +5,10 @@ import { jwtVerify } from "jose"
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "crm-onia-secret-key-2024")
 const COOKIE_NAME = "auth_token"
 
-const PUBLIC_PATHS = ["/login", "/api/auth"]
-const USER_ALLOWED_PATHS = ["/no-autorizado", "/api/auth"]
+const PUBLIC_PATHS = ["/login", "/api/auth", "/no-autorizado"]
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
-}
-
-function isUserAllowedPath(pathname: string): boolean {
-  return USER_ALLOWED_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
 }
 
 function isStaticAsset(pathname: string): boolean {
@@ -43,36 +38,6 @@ export async function middleware(request: NextRequest) {
 
   try {
     await jwtVerify(token, JWT_SECRET)
-
-    const verifyUrl = new URL("/api/auth/verify", request.url)
-    const verifyResponse = await fetch(verifyUrl.toString(), {
-      headers: {
-        Cookie: `${COOKIE_NAME}=${token}`,
-      },
-    })
-
-    if (!verifyResponse.ok) {
-      const loginUrl = new URL("/login", request.url)
-      loginUrl.searchParams.set("next", pathname)
-      const response = NextResponse.redirect(loginUrl)
-      response.cookies.delete(COOKIE_NAME)
-      return response
-    }
-
-    const { user } = await verifyResponse.json()
-    const role = user?.role
-
-    if (role !== "admin") {
-      if (isUserAllowedPath(pathname)) {
-        return NextResponse.next()
-      }
-      return NextResponse.redirect(new URL("/no-autorizado", request.url))
-    }
-
-    if (pathname === "/no-autorizado" && role === "admin") {
-      return NextResponse.redirect(new URL("/", request.url))
-    }
-
     return NextResponse.next()
   } catch {
     const loginUrl = new URL("/login", request.url)

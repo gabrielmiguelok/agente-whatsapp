@@ -18,25 +18,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
  */
 export const dynamic = "force-dynamic"
 
-/* ===== Helpers de redirección segura ===== */
-function isInternalPath(p?: string | null): p is string {
-  if (!p) return false
-  return p.startsWith("/") && !p.startsWith("//") && !/^\/https?:/i.test(p)
-}
-function isAdminPath(p?: string | null): boolean {
-  return !!p && p.startsWith("/admin")
-}
-function defaultDestForRole(role?: string | null): string {
-  return role === "admin" ? "/" : "/no-autorizado"
-}
 function resolveDest(role: string | null | undefined, nextParam?: string | null): string {
-  if (isInternalPath(nextParam) && nextParam !== "/login") {
-    if (isAdminPath(nextParam) && role !== "admin") {
-      return defaultDestForRole(role)
-    }
+  if (role !== "admin") {
+    return "/no-autorizado"
+  }
+  if (nextParam && nextParam.startsWith("/") && nextParam !== "/login" && !nextParam.startsWith("//")) {
     return nextParam
   }
-  return defaultDestForRole(role)
+  return "/"
 }
 
 /* ========= Wrapper con Suspense (obligatorio para useSearchParams) ========= */
