@@ -1,8 +1,7 @@
-// app/api/auth/login/route.ts
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { authenticate, createSession } from "@/lib/auth"
-import { createUser, findUserByEmail, db } from "@/lib/db"
+import { authenticate, createSession, createUser, findUserByEmail } from "@/lib/auth"
+import { db } from "@/lib/db"
 
 export async function POST(request: Request) {
   try {
@@ -27,7 +26,7 @@ export async function POST(request: Request) {
       if (!user) {
         // Crear admin por defecto si no existe
         const hash = await bcrypt.hash(DEFAULT_ADMIN_PASSWORD, 12)
-        const userId = await createUser({
+        await createUser({
           email,
           firstName: "Default",
           lastName: "Admin",
@@ -35,7 +34,6 @@ export async function POST(request: Request) {
           passwordHash: hash,
           role: "admin",
           picture: null,
-          googleId: null,
         })
         user = await findUserByEmail(email)
         if (!user) {

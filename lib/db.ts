@@ -1,5 +1,3 @@
-// lib/db.ts
-// Pool de conexiones a MariaDB usando mysql2/promise
 import mysql from 'mysql2/promise';
 
 const pool = mysql.createPool({
@@ -7,7 +5,7 @@ const pool = mysql.createPool({
   port: parseInt(process.env.DB_PORT || '3306'),
   user: process.env.DB_USER || 'emprendi2',
   password: process.env.DB_PASSWORD || '56Ghambju!',
-  database: process.env.DB_NAME || 'crm_db',
+  database: process.env.DB_NAME || 'crm_onia',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
@@ -16,6 +14,7 @@ const pool = mysql.createPool({
 });
 
 export default pool;
+export const db = pool;
 
 // Helper para ejecutar queries
 export async function query<T = any>(sql: string, params?: any[]): Promise<T[]> {
