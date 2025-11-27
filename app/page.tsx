@@ -180,20 +180,19 @@ export default function Home() {
     try {
       const response = await fetch('/api/auth/verify', { cache: 'no-store' });
       if (!response.ok) {
-        router.push('/login');
+        router.replace('/login');
         return;
       }
       const data = await response.json();
       if (data.user.role !== 'admin') {
-        router.push('/no-autorizado');
+        router.replace('/no-autorizado');
         return;
       }
       setCurrentUser({ email: data.user.email, name: data.user.name, role: data.user.role });
+      setCheckingAuth(false);
     } catch (error) {
       console.error('Error verifying auth:', error);
-      router.push('/login');
-    } finally {
-      setCheckingAuth(false);
+      router.replace('/login');
     }
   };
 
