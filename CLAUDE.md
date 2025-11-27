@@ -16,9 +16,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm install          # Install dependencies
 pnpm dev              # Next.js dev server (port 4850)
 pnpm build            # Production build
-pnpm start            # Production server (port 38350)
+pnpm start            # Production server (port 4444)
 pnpm lint             # ESLint
 ```
+
+## Production URL
+
+**https://crm.onia.agency** (puerto 4444)
 
 ## Architecture
 
@@ -450,9 +454,22 @@ POST /api/whatsapp/triggers              # Reload triggers in all sessions
 
 ## Database Tables
 
-**CustomTable:** `clientes`, `empleados`, `productos`, `ventas`, `revendedores`, `sucursales`, `operaciones_compra`, `analytics`
+**Base de datos:** `crm_onia`
 
-**WhatsApp:** `contacts`, `messages`, `sequences`, `sequence_steps`, `contact_sequence_log`, `dedup_cache`, `outbox`, `whatsapp_sessions`
+**WhatsApp CRM:**
+- `contacts` - Contactos de WhatsApp
+- `messages` - Historial de mensajes
+- `sequences` - Secuencias automáticas
+- `sequence_steps` - Pasos de secuencias
+- `contact_sequence_log` - Log de secuencias por contacto
+- `contact_sequence_history` - Historial de secuencias
+- `dedup_cache` - Cache de deduplicación
+- `outbox` - Cola de mensajes salientes
+- `whatsapp_sessions` - Sesiones de WhatsApp
+
+**IA Configuration:**
+- `ai_prompt_config` - Configuración de prompts de IA (14 campos)
+- `ai_ignored_contacts` - Contactos ignorados temporalmente
 
 ## Critical: Don't Break
 
@@ -478,28 +495,36 @@ POST /api/whatsapp/triggers              # Reload triggers in all sessions
 ## Environment Variables
 
 ```bash
-DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-OPENAI_API_KEY                    # For AI conversation
+# Base de datos
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=emprendi2
+DB_PASSWORD=56Ghambju!
+DB_NAME=crm_onia
+
+# Aplicación
+NEXT_PUBLIC_BASE_URL=https://crm.onia.agency
+APP_PASSWORD=LOCK                 # Password para desbloquear la app
+OPENAI_API_KEY=                   # Para conversaciones con IA
 ```
 
 ## Database Access
 
 ```bash
 # MariaDB - Sin contraseña
-sudo mysql -u root -p
-# (presionar Enter sin ingresar contraseña)
+sudo mysql -u root
 
 # Ejemplo de uso
-sudo mysql crm_db -e "SELECT * FROM ai_prompt_config;"
+sudo mysql crm_onia -e "SELECT * FROM ai_prompt_config;"
 ```
 
 ## PM2 Production
 
 ```bash
-pm2 start npm --name crm-whatsapp2 -- run start
-pm2 logs crm-whatsapp2
-pm2 restart crm-whatsapp2
-pm2 flush crm-whatsapp2    # Clear logs
+pm2 start pnpm --name crm-onia -- start
+pm2 logs crm-onia
+pm2 restart crm-onia
+pm2 flush crm-onia         # Clear logs
 ```
 
 ---
