@@ -149,7 +149,8 @@ export default function Home() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<MainTab>('contacts');
   const [isHydrated, setIsHydrated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ email: string; name: string | null } | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{ email: string; name: string | null; role: string } | null>(null);
 
   const [optionsCache, setOptionsCache] = useState<Record<string, Array<{ value: string; label: string }>>>({});
 
@@ -172,18 +173,27 @@ export default function Home() {
 
   useEffect(() => {
     setIsHydrated(true);
-    fetchCurrentUser();
+    verifyAuthAndRole();
   }, []);
 
-  const fetchCurrentUser = async () => {
+  const verifyAuthAndRole = async () => {
     try {
-      const response = await fetch('/api/auth/verify');
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUser({ email: data.user.email, name: data.user.name });
+      const response = await fetch('/api/auth/verify', { cache: 'no-store' });
+      if (!response.ok) {
+        router.push('/login');
+        return;
       }
+      const data = await response.json();
+      if (data.user.role !== 'admin') {
+        router.push('/no-autorizado');
+        return;
+      }
+      setCurrentUser({ email: data.user.email, name: data.user.name, role: data.user.role });
     } catch (error) {
-      console.error('Error fetching current user:', error);
+      console.error('Error verifying auth:', error);
+      router.push('/login');
+    } finally {
+      setCheckingAuth(false);
     }
   };
 
@@ -436,6 +446,17 @@ export default function Home() {
     { id: 'config' as MainTab, label: 'Config IA', icon: NavIcons.config },
     { id: 'users' as MainTab, label: 'Usuarios', icon: NavIcons.users },
   ];
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-3 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+          <p className="text-gray-500 dark:text-gray-400">Verificando permisos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

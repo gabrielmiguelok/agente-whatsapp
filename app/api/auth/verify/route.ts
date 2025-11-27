@@ -1,13 +1,10 @@
-// =============================================================================
-// FILE: /app/api/auth/verify/route.ts
-// =============================================================================
 import { NextResponse } from "next/server"
-import { getSession } from "@/lib/auth"
+import { getSessionWithDbCheck } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
-  const session = await getSession()
+  const session = await getSessionWithDbCheck()
   if (session) {
     return NextResponse.json({ authenticated: true, user: session })
   } else {

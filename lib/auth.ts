@@ -119,6 +119,36 @@ export async function getSession(): Promise<SessionUser | null> {
   }
 }
 
+export async function getSessionWithDbCheck(): Promise<SessionUser | null> {
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get(COOKIE_NAME)?.value
+
+    if (!token) return null
+
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    const userId = payload.id as number
+
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      "SELECT id, email, role, full_name, first_name, last_name FROM users WHERE id = ? LIMIT 1",
+      [userId]
+    )
+
+    if (!rows[0]) return null
+
+    const user = rows[0] as User
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.full_name || `${user.first_name || ""} ${user.last_name || ""}`.trim() || null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function destroySession(): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.delete(COOKIE_NAME)
