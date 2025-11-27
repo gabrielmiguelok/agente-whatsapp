@@ -452,9 +452,60 @@ DELETE /api/whatsapp/sessions/{email}    # Delete session
 POST /api/whatsapp/triggers              # Reload triggers in all sessions
 ```
 
+## Authentication System
+
+Sistema de autenticación JWT con bcrypt para contraseñas.
+
+### Arquitectura
+
+```
+middleware.ts                    # Protección de rutas (JWT verify)
+lib/auth.ts                      # Funciones de auth (session, JWT, bcrypt)
+app/login/page.tsx               # UI de login/registro
+app/api/auth/
+├── login/route.ts               # POST login (+ admin por defecto)
+├── register/route.ts            # POST registro de usuarios
+├── verify/route.ts              # GET verificar sesión
+└── logout/route.ts              # POST cerrar sesión
+```
+
+### Flujo de Autenticación
+
+```
+Usuario accede a ruta protegida
+    ↓
+middleware.ts verifica JWT (cookie: auth_token)
+    ├── Sin token → redirect /login?next={path}
+    ├── Token inválido → redirect /login + delete cookie
+    └── Token válido → NextResponse.next()
+```
+
+### APIs de Auth
+
+```
+POST /api/auth/login     # { email, password } → { user, message }
+POST /api/auth/register  # { email, password, firstName, lastName } → { user }
+GET  /api/auth/verify    # → { authenticated, user } o 401
+POST /api/auth/logout    # → { success }
+```
+
+### Admin por Defecto
+
+Si `DEFAULT_ADMIN_EMAIL` y `DEFAULT_ADMIN_PASSWORD` están en `.env.local`, el primer login con esas credenciales crea automáticamente el usuario admin.
+
+### Rutas Públicas
+
+Definidas en `middleware.ts`:
+- `/login`
+- `/api/auth/*`
+- Assets estáticos (`/_next`, `.ico`, etc.)
+
 ## Database Tables
 
 **Base de datos:** `crm_onia`
+
+**Usuarios:**
+- `users` - Usuarios del sistema (id, email, password_hash, first_name, last_name, full_name, role, picture)
 
 **WhatsApp CRM:**
 - `contacts` - Contactos de WhatsApp
@@ -504,8 +555,12 @@ DB_NAME=crm_onia
 
 # Aplicación
 NEXT_PUBLIC_BASE_URL=https://crm.onia.agency
-APP_PASSWORD=LOCK                 # Password para desbloquear la app
 OPENAI_API_KEY=                   # Para conversaciones con IA
+
+# Autenticación
+JWT_SECRET=crm-onia-jwt-secret-2024-secure
+DEFAULT_ADMIN_EMAIL=              # Email del admin por defecto
+DEFAULT_ADMIN_PASSWORD=           # Password del admin por defecto
 ```
 
 ## Database Access
@@ -692,3 +747,10 @@ Si shouldStart=true → AIConversation.startConversation()
 15. **MissionField.dbColumn**: Mapeo a columnas de contacts
 16. **TriggerDecisionService**: Usa todos los campos trigger_* de la config
 17. **WhatsAppClient.shouldStartConversation()**: No usar isTrigger() deprecado
+
+### Critical: Don't Break (Authentication)
+
+18. **Cookie name**: `auth_token` en middleware.ts y lib/auth.ts
+19. **JWT_SECRET**: Debe coincidir en middleware.ts y lib/auth.ts
+20. **PUBLIC_PATHS**: Rutas sin autenticación definidas en middleware.ts
+21. **users table**: Columnas password_hash (no password), role enum('user','admin')
