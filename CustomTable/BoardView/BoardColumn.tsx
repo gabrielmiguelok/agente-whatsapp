@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { GripVertical } from 'lucide-react';
 import { getBadgeColors } from '../CustomTableColumnsConfig';
 import BoardCard from './BoardCard';
 
@@ -16,6 +17,12 @@ export type BoardColumnProps = {
   onDragStart?: (e: React.DragEvent, rowId: string) => void;
   onDragEnd?: (e: React.DragEvent) => void;
   columnWidth?: number;
+  isColumnDragging?: boolean;
+  isColumnDropTarget?: boolean;
+  onColumnDragStart?: (columnValue: string) => void;
+  onColumnDragOver?: (columnValue: string) => void;
+  onColumnDragEnd?: () => void;
+  onColumnDrop?: (targetColumnValue: string) => void;
 };
 
 /**
@@ -34,6 +41,12 @@ export default function BoardColumn({
   onDragStart,
   onDragEnd,
   columnWidth = 280,
+  isColumnDragging = false,
+  isColumnDropTarget = false,
+  onColumnDragStart,
+  onColumnDragOver,
+  onColumnDragEnd,
+  onColumnDrop,
 }: BoardColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -65,17 +78,39 @@ export default function BoardColumn({
   const textPrimary = isDarkMode ? 'oklch(0.98 0.002 240)' : '#1f2937';
   const textSecondary = isDarkMode ? 'oklch(0.7 0.02 240)' : '#64748b';
 
-  // Estilo cuando se arrastra sobre la columna
+  // Estilo cuando se arrastra sobre la columna (cards)
   const dragOverStyle = isDragOver ? {
     backgroundColor: isDarkMode ? 'rgba(18,124,243,0.15)' : 'rgba(18,124,243,0.08)',
     borderColor: 'rgba(18,124,243,0.4)',
   } : {};
 
+  // Estilo cuando se arrastra la columna misma
+  const columnDragStyle = isColumnDragging ? {
+    opacity: 0.5,
+    transform: 'scale(0.98)',
+  } : isColumnDropTarget ? {
+    borderColor: '#127CF3',
+    borderWidth: '2px',
+    boxShadow: '0 0 0 2px rgba(18,124,243,0.2)',
+  } : {};
+
   return (
     <div
-      onDragOver={handleDragOver}
+      onDragOver={(e) => {
+        handleDragOver(e);
+        if (e.dataTransfer.types.includes('column')) {
+          onColumnDragOver?.(groupValue);
+        }
+      }}
       onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onDrop={(e) => {
+        if (e.dataTransfer.types.includes('column')) {
+          e.preventDefault();
+          onColumnDrop?.(groupValue);
+        } else {
+          handleDrop(e);
+        }
+      }}
       style={{
         width: columnWidth,
         minWidth: columnWidth,
@@ -88,31 +123,55 @@ export default function BoardColumn({
         maxHeight: '100%',
         transition: 'all 150ms ease',
         ...dragOverStyle,
+        ...columnDragStyle,
       }}
     >
-      {/* Header de la columna */}
-      <div style={{
-        padding: '12px 14px',
-        borderBottom: `1px solid ${columnBorder}`,
-        position: 'sticky',
-        top: 0,
-        backgroundColor: columnBg,
-        borderRadius: '10px 10px 0 0',
-        zIndex: 1,
-      }}>
+      {/* Header de la columna - DRAGGABLE */}
+      <div
+        draggable={!!onColumnDragStart}
+        onDragStart={(e) => {
+          e.dataTransfer.setData('column', groupValue);
+          e.dataTransfer.effectAllowed = 'move';
+          onColumnDragStart?.(groupValue);
+        }}
+        onDragEnd={() => {
+          onColumnDragEnd?.();
+        }}
+        style={{
+          padding: '12px 14px',
+          borderBottom: `1px solid ${columnBorder}`,
+          position: 'sticky',
+          top: 0,
+          backgroundColor: columnBg,
+          borderRadius: '10px 10px 0 0',
+          zIndex: 1,
+          cursor: onColumnDragStart ? 'grab' : 'default',
+        }}
+      >
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: '8px',
         }}>
-          {/* Badge con el valor del grupo */}
+          {/* Grip icon + Badge con el valor del grupo */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             overflow: 'hidden',
           }}>
+            {onColumnDragStart && (
+              <span style={{
+                color: textSecondary,
+                opacity: 0.5,
+                display: 'flex',
+                alignItems: 'center',
+                cursor: 'grab',
+              }}>
+                <GripVertical size={14} />
+              </span>
+            )}
             <span style={{
               backgroundColor: headerColors.bg,
               color: headerColors.text,
@@ -123,7 +182,7 @@ export default function BoardColumn({
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              maxWidth: '180px',
+              maxWidth: '160px',
             }}>
               {groupValue || 'Sin valor'}
             </span>

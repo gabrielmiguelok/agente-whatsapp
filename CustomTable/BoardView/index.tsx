@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useContext } from 'react';
+import React, { useState, useMemo, useContext, useCallback } from 'react';
 import { Box } from '@mui/material';
 import BoardColumn from './BoardColumn';
 import { TableEditContext } from '../index';
@@ -34,6 +34,9 @@ export default function BoardView({
   globalFilter = '',
 }: BoardViewProps) {
   const [draggedRowId, setDraggedRowId] = useState<string | null>(null);
+  const [draggedColumnValue, setDraggedColumnValue] = useState<string | null>(null);
+  const [dropTargetColumnValue, setDropTargetColumnValue] = useState<string | null>(null);
+  const [columnOrderState, setColumnOrderState] = useState<string[] | null>(null);
   const context = useContext(TableEditContext);
   const theme = getTableTheme(isDarkMode);
 
@@ -58,7 +61,7 @@ export default function BoardView({
   }, [data, globalFilter]);
 
   // Obtener todos los valores únicos del campo de agrupación
-  const groupValues = useMemo(() => {
+  const baseGroupValues = useMemo(() => {
     const values = new Set<string>();
 
     // Agregar valores de las opciones definidas (si existen)
@@ -87,6 +90,54 @@ export default function BoardView({
       return a.localeCompare(b);
     });
   }, [filteredData, groupByField, groupColumn]);
+
+  // Usar orden personalizado si existe, sino usar el orden base
+  const groupValues = useMemo(() => {
+    if (!columnOrderState) return baseGroupValues;
+
+    // Ordenar según el estado guardado, agregando nuevos valores al final
+    const ordered = [...columnOrderState].filter(v => baseGroupValues.includes(v));
+    const newValues = baseGroupValues.filter(v => !columnOrderState.includes(v));
+    return [...ordered, ...newValues];
+  }, [baseGroupValues, columnOrderState]);
+
+  // Handlers para drag & drop de columnas
+  const handleColumnDragStart = useCallback((columnValue: string) => {
+    setDraggedColumnValue(columnValue);
+  }, []);
+
+  const handleColumnDragOver = useCallback((columnValue: string) => {
+    if (columnValue !== draggedColumnValue) {
+      setDropTargetColumnValue(columnValue);
+    }
+  }, [draggedColumnValue]);
+
+  const handleColumnDragEnd = useCallback(() => {
+    setDraggedColumnValue(null);
+    setDropTargetColumnValue(null);
+  }, []);
+
+  const handleColumnDrop = useCallback((targetColumnValue: string) => {
+    if (!draggedColumnValue || draggedColumnValue === targetColumnValue) {
+      handleColumnDragEnd();
+      return;
+    }
+
+    const currentOrder = [...groupValues];
+    const dragIndex = currentOrder.indexOf(draggedColumnValue);
+    const dropIndex = currentOrder.indexOf(targetColumnValue);
+
+    if (dragIndex === -1 || dropIndex === -1) {
+      handleColumnDragEnd();
+      return;
+    }
+
+    currentOrder.splice(dragIndex, 1);
+    currentOrder.splice(dropIndex, 0, draggedColumnValue);
+
+    setColumnOrderState(currentOrder);
+    handleColumnDragEnd();
+  }, [draggedColumnValue, groupValues, handleColumnDragEnd]);
 
   // Agrupar datos por el campo seleccionado
   const groupedData = useMemo(() => {
@@ -230,6 +281,12 @@ export default function BoardView({
             onDrop={handleDrop}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            isColumnDragging={draggedColumnValue === groupValue}
+            isColumnDropTarget={dropTargetColumnValue === groupValue && draggedColumnValue !== groupValue}
+            onColumnDragStart={handleColumnDragStart}
+            onColumnDragOver={handleColumnDragOver}
+            onColumnDragEnd={handleColumnDragEnd}
+            onColumnDrop={handleColumnDrop}
           />
         ))}
       </Box>
