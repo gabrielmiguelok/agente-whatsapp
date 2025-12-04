@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { IconButton } from '@mui/material';
-import { Filter } from 'lucide-react';
+import { Filter, GripVertical } from 'lucide-react';
 import { STYLES_CONFIG, COLORS_CONFIG } from '../../config';
 
 export default function TableHeader({
@@ -12,6 +12,12 @@ export default function TableHeader({
   onHeaderTouchStart,
   handleOpenMenu,
   handleMouseDownResize,
+  draggedColumn,
+  dropTargetColumn,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
 }: {
   headerGroups: any[];
   handleHeaderClick: (evt: React.MouseEvent, index: number, colId: string) => void;
@@ -19,6 +25,12 @@ export default function TableHeader({
   onHeaderTouchStart: (evt: React.TouchEvent, index: number, colId: string) => void;
   handleOpenMenu: (evt: React.MouseEvent<HTMLElement>, colId: string) => void;
   handleMouseDownResize: (evt: React.MouseEvent, colId: string) => void;
+  draggedColumn?: string | null;
+  dropTargetColumn?: string | null;
+  onDragStart?: (columnId: string) => void;
+  onDragOver?: (columnId: string) => void;
+  onDragEnd?: () => void;
+  onDrop?: (targetColumnId: string) => void;
 }) {
   return (
     <>
@@ -36,28 +48,77 @@ export default function TableHeader({
             {headerGroup.headers.map((header: any, hIndex: number) => {
               const colId = header.column.id as string;
               const isIndexCol = colId === '_selectIndex';
+              const isDragging = draggedColumn === colId;
+              const isDropTarget = dropTargetColumn === colId && draggedColumn !== colId;
 
               return (
                 <th
                   key={header.id}
                   className="custom-th"
                   data-header-index={hIndex}
+                  draggable={!isIndexCol && !!onDragStart}
+                  onDragStart={(e) => {
+                    if (isIndexCol || !onDragStart) {
+                      e.preventDefault();
+                      return;
+                    }
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', colId);
+                    onDragStart(colId);
+                  }}
+                  onDragOver={(e) => {
+                    if (isIndexCol) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    onDragOver?.(colId);
+                  }}
+                  onDragEnd={() => {
+                    onDragEnd?.();
+                  }}
+                  onDrop={(e) => {
+                    if (isIndexCol) return;
+                    e.preventDefault();
+                    onDrop?.(colId);
+                  }}
                   style={{
                     backgroundColor: isIndexCol
                       ? 'var(--color-table-index-header)'
+                      : isDragging
+                      ? 'rgba(18, 124, 243, 0.15)'
+                      : isDropTarget
+                      ? 'rgba(18, 124, 243, 0.25)'
                       : 'var(--color-table-header)',
-                    cursor: 'pointer',
+                    cursor: isIndexCol ? 'pointer' : 'grab',
+                    opacity: isDragging ? 0.6 : 1,
+                    borderLeft: isDropTarget ? '3px solid #127CF3' : undefined,
+                    transition: 'background-color 0.15s ease, opacity 0.15s ease',
                   }}
                   onClick={(evt) => handleHeaderClick(evt, hIndex, colId)}
                   onMouseDown={(evt) => onHeaderMouseDown(evt, hIndex, colId)}
                   onTouchStart={(evt) => onHeaderTouchStart(evt, hIndex, colId)}
                 >
                   <div className="column-header-content">
+                    {!isIndexCol && onDragStart && (
+                      <span
+                        className="drag-handle"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{
+                          cursor: 'grab',
+                          opacity: 0.4,
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginRight: '4px',
+                        }}
+                      >
+                        <GripVertical size={12} />
+                      </span>
+                    )}
                     <span
                       className="column-header-label"
                       style={{
                         fontWeight: (isIndexCol ? STYLES_CONFIG.header.indexFontWeight : STYLES_CONFIG.header.fontWeight) as any,
-                        color: COLORS_CONFIG.cssVars.text
+                        color: COLORS_CONFIG.cssVars.text,
+                        flex: 1,
                       }}
                       title={String(header.column.columnDef.header || '')}
                     >
@@ -86,7 +147,6 @@ export default function TableHeader({
                     )}
                   </div>
 
-                  {/* Manija de resize con feedback azul Synara sutil */}
                   <div
                     className="resize-handle"
                     onMouseDown={(evt) => {
@@ -101,7 +161,6 @@ export default function TableHeader({
         ))}
       </thead>
 
-      {/* Estilos locales alineados al brand Synara 2025 */}
       <style jsx>{`
         th.custom-th {
           position: relative;
@@ -111,6 +170,9 @@ export default function TableHeader({
           user-select: none;
           color: ${COLORS_CONFIG.cssVars.text};
           border-bottom: 1px solid ${COLORS_CONFIG.cssVars.divider};
+        }
+        th.custom-th:active {
+          cursor: grabbing;
         }
         .column-header-content {
           display: flex;
@@ -131,6 +193,9 @@ export default function TableHeader({
           display: flex;
           gap: 4px;
         }
+        .drag-handle:hover {
+          opacity: 1 !important;
+        }
         .resize-handle {
           position: absolute;
           top: 0;
@@ -141,7 +206,6 @@ export default function TableHeader({
           user-select: none;
           background: ${STYLES_CONFIG.resizeHandle.background};
         }
-        /* Feedback de hover: línea azul Synara sutil */
         th.custom-th:hover .resize-handle {
           background: ${STYLES_CONFIG.resizeHandle.hoverBackground};
         }
@@ -149,4 +213,3 @@ export default function TableHeader({
     </>
   );
 }
-// LICENSE: MIT

@@ -65,6 +65,12 @@ export type TableViewProps = {
   autoCopyDelay?: number;
   containerRef: React.RefObject<HTMLElement>;
   isDarkMode?: boolean;
+  draggedColumn?: string | null;
+  dropTargetColumn?: string | null;
+  onDragStart?: (columnId: string) => void;
+  onDragOver?: (columnId: string) => void;
+  onDragEnd?: () => void;
+  onDrop?: (targetColumnId: string) => void;
 };
 
 export default function TableView({
@@ -87,6 +93,12 @@ export default function TableView({
   autoCopyDelay = 1000,
   containerRef,
   isDarkMode = false,
+  draggedColumn,
+  dropTargetColumn,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
 }: TableViewProps) {
   const BRAND = '#127CF3'; // Synara primary blue
 
@@ -688,6 +700,12 @@ export default function TableView({
             onHeaderTouchStart={onHeaderTouchStart as any}
             handleOpenMenu={handleOpenMenu}
             handleMouseDownResize={handleMouseDownResize}
+            draggedColumn={draggedColumn}
+            dropTargetColumn={dropTargetColumn}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDragEnd={onDragEnd}
+            onDrop={onDrop}
           />
 
           <TableBody

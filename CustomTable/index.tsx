@@ -12,7 +12,7 @@
  *  - Paleta de colores actualizada para coincidir con Synara.
  ************************************************************************************/
 
-import React, { useRef, useState, useEffect, createContext, useMemo } from 'react';
+import React, { useRef, useState, useEffect, createContext, useMemo, useCallback } from 'react';
 import { useTheme } from 'next-themes';
 import { useCustomTableLogic } from './hooks/useCustomTableLogic';
 import FiltersToolbar from './toolbar/FiltersToolbar';
@@ -163,11 +163,60 @@ export default function CustomTable({
     columnWidths,
     handleSetColumnWidth,
     finalColumns,
+    columnOrder,
+    setColumnOrder,
   } = useCustomTableLogic({
-    data: onCellEdit ? data : tableData,  // Usar data directamente si hay onCellEdit personalizado
+    data: onCellEdit ? data : tableData,
     columnsDef,
     pageSize,
   });
+
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [dropTargetColumn, setDropTargetColumn] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((columnId: string) => {
+    if (columnId === '_selectIndex') return;
+    setDraggedColumn(columnId);
+  }, []);
+
+  const handleDragOver = useCallback((columnId: string) => {
+    if (columnId === '_selectIndex') return;
+    if (columnId !== draggedColumn) {
+      setDropTargetColumn(columnId);
+    }
+  }, [draggedColumn]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedColumn(null);
+    setDropTargetColumn(null);
+  }, []);
+
+  const handleDrop = useCallback((targetColumnId: string) => {
+    if (!draggedColumn || draggedColumn === targetColumnId) {
+      handleDragEnd();
+      return;
+    }
+
+    if (targetColumnId === '_selectIndex' || draggedColumn === '_selectIndex') {
+      handleDragEnd();
+      return;
+    }
+
+    const currentOrder = [...columnOrder];
+    const dragIndex = currentOrder.indexOf(draggedColumn);
+    const dropIndex = currentOrder.indexOf(targetColumnId);
+
+    if (dragIndex === -1 || dropIndex === -1) {
+      handleDragEnd();
+      return;
+    }
+
+    currentOrder.splice(dragIndex, 1);
+    currentOrder.splice(dropIndex, 0, draggedColumn);
+
+    setColumnOrder(currentOrder);
+    handleDragEnd();
+  }, [draggedColumn, columnOrder, setColumnOrder, handleDragEnd]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -258,13 +307,19 @@ export default function CustomTable({
               onHideRows={onHideRows}
               sorting={sorting as any}
               toggleSort={toggleSort}
-              containerHeight="100%" // ← usamos todo el espacio interno
+              containerHeight="100%"
               rowHeight={rowHeight}
               loadingText={loadingText}
               noResultsText={noResultsText}
               autoCopyDelay={autoCopyDelay}
               containerRef={containerRef}
               isDarkMode={isDarkMode}
+              draggedColumn={draggedColumn}
+              dropTargetColumn={dropTargetColumn}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
             />
           )}
         </div>

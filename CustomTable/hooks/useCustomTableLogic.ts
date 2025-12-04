@@ -137,15 +137,30 @@ export function useCustomTableLogic<T extends Record<string, any>>({
       : step3;
   }, [data, finalColumns, columnFilters, debouncedGlobalFilter, sorting]);
 
-  // 7) Instancia react-table (ID REAL por fila)
+  // 7) Orden de columnas (para drag & drop)
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+
+  // Inicializar orden de columnas al cargar
+  useEffect(() => {
+    if (columnOrder.length === 0 && indexedColumns.length > 0) {
+      const order = indexedColumns.map((col: any) => col.id || col.accessorKey).filter(Boolean);
+      setColumnOrder(order);
+    }
+  }, [indexedColumns, columnOrder.length]);
+
+  // 8) Instancia react-table (ID REAL por fila)
   const table = useReactTable<T>({
     data: filteredData,
     columns: indexedColumns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    getRowId: (row) => String((row as any).id ?? ''), // <- USAR ID de DB, no el índice visual
+    getRowId: (row) => String((row as any).id ?? ''),
     pageCount: Math.ceil(filteredData.length / pageSize),
     manualPagination: false,
+    state: {
+      columnOrder,
+    },
+    onColumnOrderChange: setColumnOrder,
     initialState: { pagination: { pageSize, pageIndex: 0 } },
   });
 
@@ -198,7 +213,9 @@ export function useCustomTableLogic<T extends Record<string, any>>({
     handleDownloadExcel,
     columnWidths,
     handleSetColumnWidth,
-    finalColumns,   // SimpleColumnDef[]
-    filteredData,   // T[]
+    finalColumns,
+    filteredData,
+    columnOrder,
+    setColumnOrder,
   };
 }
