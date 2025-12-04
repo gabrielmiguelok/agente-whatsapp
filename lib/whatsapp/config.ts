@@ -45,10 +45,10 @@ export const CONFIG: WhatsAppConfig = {
   // Reconexion robusta
   RECONNECT_BASE_MS: 2000,
   RECONNECT_MAX_MS: 30_000,
-  REPLACED_RETRY_LIMIT: 2,
-  REPLACED_WINDOW_MS: 60_000,
-  AUTO_FORCE_NEW_ON_PERSISTENT_REPLACED: true,
-  AUTO_FORCE_NEW_MAX: 1,
+  REPLACED_RETRY_LIMIT: 3,
+  REPLACED_WINDOW_MS: 120_000,
+  AUTO_FORCE_NEW_ON_PERSISTENT_REPLACED: false,
+  AUTO_FORCE_NEW_MAX: 0,
 
   // Envios rate-limit
   SEND_RATE_MIN_DELAY_MS: 2000,
@@ -59,8 +59,8 @@ export const CONFIG: WhatsAppConfig = {
   // OpenAI
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
 
-  // Feature flags - Secuencias automáticas deshabilitadas
-  SEQUENCES_ENABLED: false,
+  // Feature flags - Secuencias automáticas habilitadas
+  SEQUENCES_ENABLED: true,
 };
 
 export default CONFIG;
