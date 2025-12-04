@@ -17,7 +17,7 @@ import {
 import type { SessionStatus as StatusType } from '@/lib/whatsapp/types';
 import type { PromptConfig } from '@/lib/whatsapp/types/promptConfig';
 
-const SESSION_ID = 'default';
+const SESSION_ID = 'crm-onia';
 
 interface SessionData {
   email: string;
@@ -41,23 +41,10 @@ export default function CRMWhatsAppPage() {
   const [promptLoading, setPromptLoading] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Inicializar sesión
+  // Cargar sesión existente (no iniciar nueva, el auto-start ya lo hace)
   const initializeSession = useCallback(async () => {
     setInitializing(true);
     try {
-      const createResponse = await fetch('/api/whatsapp/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: SESSION_ID }),
-      });
-
-      const createData = await createResponse.json();
-      if (createData.success || createResponse.status === 409) {
-        await fetchSession();
-      } else {
-        throw new Error(createData.error || 'Error inicializando sesión');
-      }
-    } catch {
       await fetchSession();
     } finally {
       setInitializing(false);
