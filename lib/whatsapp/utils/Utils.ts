@@ -8,9 +8,11 @@ import crypto from 'crypto';
 export class Utils {
   /**
    * Verifica si un JID es de conversacion 1:1
+   * Incluye @s.whatsapp.net (personal) y @lid (business/empresarial)
    */
   static isOneToOneJid(jid: string = ''): boolean {
-    return typeof jid === 'string' && jid.endsWith('@s.whatsapp.net');
+    if (typeof jid !== 'string') return false;
+    return jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
   }
 
   /**

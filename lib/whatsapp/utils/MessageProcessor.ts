@@ -15,7 +15,7 @@ export class MessageProcessor {
     if (msg.key.fromMe) return null;
 
     const jid = msg.key.remoteJid || '';
-    if (!jid.endsWith('@s.whatsapp.net')) return null;
+    if (!Utils.isOneToOneJid(jid)) return null;
     if (!msg.message) return null;
 
     const text = this._extractPureTextFromMessage(msg.message);
