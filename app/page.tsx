@@ -16,7 +16,7 @@ import type { PromptConfig } from '@/lib/whatsapp/types/promptConfig';
 import { useRouter } from 'next/navigation';
 
 const SESSION_ID = 'crm-onia';
-const CONTACTS_DYNAMIC_FIELDS = ['seguimiento', 'accion', 'zona'];
+const CONTACTS_DYNAMIC_FIELDS = ['accion', 'zona'];
 
 const contactsColumns = buildColumnsFromDefinition({
   phone: { type: 'text', header: 'TELÉFONO', width: 150 },
@@ -26,9 +26,13 @@ const contactsColumns = buildColumnsFromDefinition({
     type: 'badge',
     header: 'SEGUIMIENTO',
     width: 140,
-    allowCreate: true,
-    useDynamicOptions: true,
-    dataset: 'contacts',
+    allowCreate: false,
+    options: [
+      { value: 'SEGUIMIENTO 1', label: 'SEGUIMIENTO 1' },
+      { value: 'SEGUIMIENTO 2', label: 'SEGUIMIENTO 2' },
+      { value: 'SEGUIMIENTO 3', label: 'SEGUIMIENTO 3' },
+      { value: 'SEGUIMIENTO 4', label: 'SEGUIMIENTO 4' },
+    ],
   },
   accion: {
     type: 'badge',
