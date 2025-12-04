@@ -48,9 +48,10 @@ export type CustomTableProps = {
   loadingText?: string;
   noResultsText?: string;
   autoCopyDelay?: number;
-  onCellEdit?: (rowId: string, colId: string, newValue: string) => void; // Custom handler para inline editing
-  onAddRecord?: () => void; // Handler para agregar nuevo registro
-  addRecordState?: AddRecordState; // Estado del botón de agregar
+  onCellEdit?: (rowId: string, colId: string, newValue: string) => void;
+  onAddRecord?: () => void;
+  addRecordState?: AddRecordState;
+  onAddColumn?: (columnName: string) => Promise<boolean>;
 };
 
 export default function CustomTable({
@@ -72,6 +73,7 @@ export default function CustomTable({
   onCellEdit,
   onAddRecord,
   addRecordState = 'idle',
+  onAddColumn,
 }: CustomTableProps) {
   /* Repos + servicio */
   const localRepo = new LocalTableDataRepository('myTableData');
@@ -258,7 +260,7 @@ export default function CustomTable({
               onDownloadExcel={handleDownloadExcel}
               onRefresh={onRefresh}
               isDarkMode={isDarkMode}
-              onThemeToggle={handleGlobalThemeToggle} // ← toggle global
+              onThemeToggle={handleGlobalThemeToggle}
               onAddRecord={onAddRecord}
               addRecordState={addRecordState}
               viewMode={viewMode}
@@ -266,6 +268,7 @@ export default function CustomTable({
               selectFields={selectFields}
               groupByField={groupByField}
               onGroupByFieldChange={setGroupByField}
+              onAddColumn={onAddColumn}
             />
           </div>
         )}
