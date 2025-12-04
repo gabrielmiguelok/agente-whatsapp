@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { buildColumnsFromDefinition } from '@/CustomTable/CustomTableColumnsConfig';
 import { useTableData } from '@/lib/hooks/useTableData';
@@ -14,14 +14,14 @@ import {
 import type { SessionStatus as StatusType } from '@/lib/whatsapp/types';
 import type { PromptConfig } from '@/lib/whatsapp/types/promptConfig';
 import { useRouter } from 'next/navigation';
+import toast from 'react-hot-toast';
 
 const SESSION_ID = 'crm-onia';
 const CONTACTS_DYNAMIC_FIELDS = ['accion', 'zona'];
 
-const contactsColumns = buildColumnsFromDefinition({
+const BASE_CONTACTS_COLUMNS = {
   phone: { type: 'text', header: 'TELÉFONO', width: 150 },
   name: { type: 'text', header: 'NOMBRE', width: 180 },
-  email: { type: 'text', header: 'EMAIL', width: 220 },
   seguimiento: {
     type: 'badge',
     header: 'SEGUIMIENTO',
@@ -58,8 +58,8 @@ const contactsColumns = buildColumnsFromDefinition({
     currencyLocale: 'es-AR',
   },
   created_at: { type: 'date', header: 'CREADO', width: 160 },
-  updated_at: { type: 'date', header: 'ACTUALIZADO', width: 160 },
-});
+} as const;
+
 
 const messagesColumns = buildColumnsFromDefinition({
   phone: { type: 'text', header: 'TELÉFONO', width: 140 },
@@ -171,13 +171,73 @@ export default function Home() {
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
 
+  const [dynamicColumns, setDynamicColumns] = useState<Array<{ name: string; type: string }>>([]);
+
   const { data, loading, error, updateCell, refetch } = useTableData({
     dataset: activeTab === 'contacts' || activeTab === 'messages' ? activeTab : 'contacts',
   });
 
+  const contactsColumns = useMemo(() => {
+    const dynamicDefs: Record<string, any> = {};
+    dynamicColumns.forEach((col) => {
+      dynamicDefs[col.name] = {
+        type: 'badge',
+        header: col.name.toUpperCase().replace(/_/g, ' '),
+        width: 140,
+        allowCreate: true,
+      };
+    });
+
+    return buildColumnsFromDefinition({
+      ...BASE_CONTACTS_COLUMNS,
+      ...dynamicDefs,
+    });
+  }, [dynamicColumns]);
+
+  const fetchDynamicColumns = useCallback(async () => {
+    try {
+      const response = await fetch('/api/contacts/columns');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDynamicColumns(result.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dynamic columns:', error);
+    }
+  }, []);
+
+  const handleAddColumn = useCallback(async (columnName: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/contacts/columns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columnName, columnType: 'badge' }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        toast.error(result.error || 'Error al crear columna');
+        return false;
+      }
+
+      toast.success(`Columna "${result.data.displayName}" creada`);
+      await fetchDynamicColumns();
+      await refetch();
+      return true;
+    } catch (error) {
+      console.error('Error adding column:', error);
+      toast.error('Error al crear columna');
+      return false;
+    }
+  }, [fetchDynamicColumns, refetch]);
+
   useEffect(() => {
     setIsHydrated(true);
     verifyAuthAndRole();
+    fetchDynamicColumns();
   }, []);
 
   const verifyAuthAndRole = async () => {
@@ -581,6 +641,7 @@ export default function Home() {
                     onCellEdit={async (rowId: string, colId: string, newValue: string) => {
                       try { await updateCell(rowId, colId, newValue); } catch {}
                     }}
+                    onAddColumn={handleAddColumn}
                   />
                 )}
               </div>
