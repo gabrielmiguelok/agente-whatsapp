@@ -20,7 +20,6 @@ import type {
   Contact,
 } from '../types';
 
-// Baileys es ESM, cargamos dinamicamente
 let makeWASocket: any;
 let useMultiFileAuthState: any;
 let DisconnectReason: any;
@@ -32,6 +31,13 @@ async function loadBaileys(): Promise<void> {
   useMultiFileAuthState = baileys.useMultiFileAuthState;
   DisconnectReason = baileys.DisconnectReason;
   fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
+}
+
+interface FailedMessage {
+  key: any;
+  jid: string;
+  timestamp: number;
+  retryCount: number;
 }
 
 export class WhatsAppClient {
@@ -56,6 +62,7 @@ export class WhatsAppClient {
 
   private _replacedTimestamps: number[] = [];
   private _autoForced: number = 0;
+  private _stoppedDueToReplaced: boolean = false;
 
   private _pollRunning: boolean = false;
   private _pollTimer: NodeJS.Timeout | null = null;
@@ -63,6 +70,11 @@ export class WhatsAppClient {
   private _manualSeqPollRunning: boolean = false;
   private _manualSeqPollTimer: NodeJS.Timeout | null = null;
   private _processingManualSequences: Set<number> = new Set();
+
+  private _initMutex: Promise<void> | null = null;
+  private _failedMessages: Map<string, FailedMessage> = new Map();
+  private _retryTimer: NodeJS.Timeout | null = null;
+  private _messageStore: Map<string, any> = new Map();
 
   constructor(deps: WhatsAppClientDeps) {
     this.sessionEmail = deps.sessionEmail;
@@ -81,9 +93,43 @@ export class WhatsAppClient {
   }
 
   /**
-   * Inicializa el cliente
+   * Inicializa el cliente (con mutex para evitar race conditions)
    */
   async initialize(): Promise<void> {
+    if (this._stoppedDueToReplaced) {
+      console.warn(`[${this.sessionEmail}] Reconexión bloqueada - sesión detenida por conflicto REPLACED`);
+      console.warn(`[${this.sessionEmail}] Usa resetReplacedBlock() o reinicia la sesión manualmente`);
+      return;
+    }
+
+    if (this.sock && this.initialized) {
+      console.log(`[${this.sessionEmail}] Ya inicializado y conectado, ignorando`);
+      return;
+    }
+
+    if (this._initMutex) {
+      console.log(`[${this.sessionEmail}] Inicialización ya en progreso, esperando...`);
+      return this._initMutex;
+    }
+
+    this._initMutex = this._doInitialize();
+    try {
+      await this._initMutex;
+    } finally {
+      this._initMutex = null;
+    }
+  }
+
+  /**
+   * Resetea el bloqueo por REPLACED (para reconexión manual)
+   */
+  resetReplacedBlock(): void {
+    this._stoppedDueToReplaced = false;
+    this._replacedTimestamps = [];
+    console.log(`[${this.sessionEmail}] Bloqueo REPLACED reseteado`);
+  }
+
+  private async _doInitialize(): Promise<void> {
     if (this._initializing) return;
     this._initializing = true;
 
@@ -94,6 +140,11 @@ export class WhatsAppClient {
         fs.mkdirSync(this.authFolder, { recursive: true });
       }
 
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+
       await this._destroySocket();
 
       this.onStatusChange?.('connecting');
@@ -101,6 +152,14 @@ export class WhatsAppClient {
       const { state, saveCreds } = await useMultiFileAuthState(this.authFolder);
       const { version } = await fetchLatestBaileysVersion();
       const browser: [string, string, string] = ['Chrome', 'Linux', '127.0.0'];
+
+      const getMessage = async (key: any) => {
+        const msgId = key?.id;
+        if (msgId && this._messageStore.has(msgId)) {
+          return this._messageStore.get(msgId);
+        }
+        return undefined;
+      };
 
       this.sock = makeWASocket({
         version,
@@ -114,6 +173,9 @@ export class WhatsAppClient {
         keepAliveIntervalMs: CONFIG.WA_KEEPALIVE_MS,
         defaultQueryTimeoutMs: 60_000,
         qrTimeout: 0,
+        getMessage,
+        retryRequestDelayMs: 500,
+        maxMsgRetryCount: 10,
       });
 
       this.sendQueue.updateSocket(this.sock);
@@ -127,26 +189,43 @@ export class WhatsAppClient {
   }
 
   /**
-   * Destruye el socket actual
+   * Destruye el socket actual de forma completa y segura
    */
   private async _destroySocket(): Promise<void> {
-    try {
-      if (this.sock) {
-        this.sock.ev.removeAllListeners();
-        (this.sock as any).end?.();
-      }
-    } catch {}
+    if (!this.sock) return;
+
+    const sockRef = this.sock;
     this.sock = null;
+
+    try {
+      sockRef.ev.removeAllListeners();
+
+      try {
+        await (sockRef as any).logout?.();
+      } catch {}
+
+      try {
+        (sockRef as any).ws?.close?.();
+      } catch {}
+
+      try {
+        (sockRef as any).end?.();
+      } catch {}
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (e: any) {
+      console.warn(`[${this.sessionEmail}] Error destruyendo socket:`, e?.message);
+    }
   }
 
   /**
    * Programa una reconexion
    */
-  private _scheduleReconnect(hint: string = ''): void {
+  private _scheduleReconnect(hint: string = '', customDelay?: number): void {
     if (this._reconnectTimer) return;
     this._closingCount++;
     const base = CONFIG.RECONNECT_BASE_MS * Math.max(1, this._closingCount);
-    const delay = Utils.jitter(Math.min(CONFIG.RECONNECT_MAX_MS, base));
+    const delay = customDelay ?? Utils.jitter(Math.min(CONFIG.RECONNECT_MAX_MS, base));
     console.log(
       `[${this.sessionEmail}] Reintentando conexion${hint ? ` (${hint})` : ''} en ~${Math.round(delay / 1000)}s...`
     );
@@ -165,12 +244,14 @@ export class WhatsAppClient {
   /**
    * Maneja el evento REPLACED
    */
-  private _incrReplacedAndMaybeRecover(): void {
+  private _incrReplacedAndMaybeRecover(): boolean {
     const now = Date.now();
     this._replacedTimestamps = this._replacedTimestamps.filter(
       (t) => now - t <= CONFIG.REPLACED_WINDOW_MS
     );
     this._replacedTimestamps.push(now);
+
+    console.warn(`[${this.sessionEmail}] La conexión fue REEMPLAZADA (${this._replacedTimestamps.length}/${CONFIG.REPLACED_RETRY_LIMIT} en ${CONFIG.REPLACED_WINDOW_MS / 1000}s)`);
 
     if (this._replacedTimestamps.length > CONFIG.REPLACED_RETRY_LIMIT) {
       if (
@@ -178,17 +259,20 @@ export class WhatsAppClient {
         this._autoForced < CONFIG.AUTO_FORCE_NEW_MAX
       ) {
         this._autoForced++;
-        console.warn(`[${this.sessionEmail}] REPLACED repetido. Auto re-vincular #${this._autoForced}...`);
+        console.warn(`[${this.sessionEmail}] REPLACED persistente. Auto re-vincular #${this._autoForced}...`);
         try {
           this.wipeAuth();
         } catch {}
-        this._scheduleReconnect('auto-force-new');
-        return;
+        return true;
       }
-      console.error(`[${this.sessionEmail}] La conexion fue REEMPLAZADA repetidas veces. Verificar.`);
-      // En lugar de process.exit, notificar error
+      console.error(`[${this.sessionEmail}] ⚠️ REPLACED repetido ${this._replacedTimestamps.length} veces. DETENIENDO reconexión.`);
+      console.error(`[${this.sessionEmail}] ⚠️ Posible causa: WhatsApp Web abierto en navegador o otra app usando las mismas credenciales.`);
+      console.error(`[${this.sessionEmail}] ⚠️ Solución: Cierra todas las sesiones de WhatsApp Web y vuelve a conectar manualmente.`);
       this.onStatusChange?.('disconnected');
+      this._stoppedDueToReplaced = true;
+      return false;
     }
+    return true;
   }
 
   /**
@@ -219,6 +303,14 @@ export class WhatsAppClient {
           statusCode === 440 || /replac/i.test(msg) || /conflict/i.test(payloadStr);
         const isLoggedOut = statusCode === DisconnectReason?.loggedOut;
         const isStream515 = statusCode === 515;
+        const isQRTimeout = statusCode === 408 && this._sawQR;
+
+        if (isQRTimeout) {
+          console.log(`[${this.sessionEmail}] QR expirado, generando nuevo...`);
+          this._sawQR = false;
+          this._scheduleReconnect('qr-timeout', 1000);
+          return;
+        }
 
         console.error(`[${this.sessionEmail}] Conexion cerrada (code=${statusCode ?? '??'})`);
         this.onStatusChange?.('disconnected');
@@ -229,14 +321,22 @@ export class WhatsAppClient {
         }
 
         if (looksReplaced) {
-          this._incrReplacedAndMaybeRecover();
-          this._scheduleReconnect('replaced');
+          const shouldRetry = this._incrReplacedAndMaybeRecover();
+          if (shouldRetry) {
+            this._scheduleReconnect('replaced', 30_000);
+          }
           return;
         }
         if (isStream515) {
           this._scheduleReconnect('stream 515');
           return;
         }
+
+        if (!this.initialized && this._sawQR) {
+          console.log(`[${this.sessionEmail}] Esperando escaneo de QR...`);
+          return;
+        }
+
         this._scheduleReconnect();
       }
 
@@ -270,7 +370,6 @@ export class WhatsAppClient {
 
     this.sock.ev.on('creds.update', saveCreds);
 
-    // Listener de mensajes
     this.sock.ev.on('messages.upsert', async (m: any) => {
       const messagesCount = m?.messages?.length || 0;
       if (messagesCount > 0) {
@@ -286,28 +385,53 @@ export class WhatsAppClient {
           const timestamp = msg?.messageTimestamp || 0;
 
           const keyId = waId || `${jid}_${timestamp}`;
-          if (!keyId) continue;
-
-          if (this.dataStore.dedup.has(keyId)) {
-            if (CONFIG.VERBOSE) console.log(`[MSG] Dedup: ${keyId}`);
+          if (!keyId) {
+            console.log(`[MSG] Sin keyId, saltando`);
             continue;
           }
 
-          // Validar 1:1
+          if (this.dataStore.dedup.has(keyId)) {
+            console.log(`[MSG] Dedup: ${keyId.slice(0, 20)}...`);
+            continue;
+          }
+
           if (!Utils.isOneToOneJid(jid)) {
+            console.log(`[MSG] No es 1:1: ${jid.slice(0, 30)}`);
             await this.dataStore.dedup.add(keyId);
             continue;
           }
 
-          // Extraer texto
           const text = Utils.extractPureTextFromMessage(msg);
           if (!text || !text.trim()) {
+            const hasMessageContent = msg?.message && Object.keys(msg.message).length > 0;
+            const isProtocolMsg = msg?.message?.protocolMessage ||
+                                  msg?.message?.reactionMessage ||
+                                  msg?.messageStubType;
+
+            if (!hasMessageContent && !isProtocolMsg && waId && !fromMe) {
+              console.log(`[MSG] Posible descifrado fallido de ${jid.split('@')[0]}, solicitando re-envío...`);
+              this._scheduleMessageRetry(msg.key, jid, timestamp);
+            } else {
+              console.log(`[MSG] Sin texto extraible de ${jid.split('@')[0]} (protocolo/reacción)`);
+            }
             await this.dataStore.dedup.add(keyId);
             if (waId) await this.dataStore.dedup.add(`WA:${waId}`);
             continue;
           }
 
-          // Logging
+          if (waId && msg?.message) {
+            this._messageStore.set(waId, msg.message);
+            if (this._messageStore.size > 500) {
+              const keysToDelete = Array.from(this._messageStore.keys()).slice(0, 100);
+              keysToDelete.forEach(k => this._messageStore.delete(k));
+            }
+          }
+
+          if (waId && this._failedMessages.has(waId)) {
+            console.log(`[MSG-RETRY] Mensaje recuperado exitosamente: ${waId.slice(0, 20)}...`);
+            this._failedMessages.delete(waId);
+          }
+
           const direction = fromMe ? 'ENVIADO' : 'RECIBIDO';
           const otherPhoneDigits = Utils.digitsOnly(jid.split('@')[0]);
 
@@ -317,8 +441,10 @@ export class WhatsAppClient {
           await this.dataStore.logMessage({ phoneDigits: otherPhoneDigits, text, direction, waId });
 
           // Secuencias (solo incoming) - Solo si SEQUENCES_ENABLED = true
+          console.log(`[MSG] fromMe=${fromMe}, SEQUENCES_ENABLED=${CONFIG.SEQUENCES_ENABLED}`);
           if (!fromMe && CONFIG.SEQUENCES_ENABLED) {
             const processed = MessageProcessor.process(msg);
+            console.log(`[MSG] MessageProcessor result: ${processed ? 'OK' : 'null'}`);
             if (processed) {
               let contact: Contact | null = null;
               try {
@@ -330,8 +456,11 @@ export class WhatsAppClient {
               // Verificar si usar AIConversation (IA conversacional)
               let handledByAI = false;
               if (this.aiConversation) {
+                console.log(`[AI] Evaluando mensaje de ${processed.phoneDigits}`);
+
                 // Si ya hay conversacion activa, procesarla
                 if (this.aiConversation.hasActiveConversation(processed.phoneDigits)) {
+                  console.log(`[AI] Conversación activa encontrada para ${processed.phoneDigits}`);
                   handledByAI = await this.aiConversation.processMessage(
                     processed.phoneDigits,
                     processed.text,
@@ -340,6 +469,7 @@ export class WhatsAppClient {
                 }
                 // Usar decisión inteligente con IA (trigger_*, VIP phones, etc)
                 else if (this.aiConversation.isEligible(processed.phoneDigits)) {
+                  console.log(`[AI] Consultando si iniciar conversación para ${processed.phoneDigits}`);
                   // Usar shouldStartConversation para decisión con IA
                   const decision = await this.aiConversation.shouldStartConversation(
                     processed.phoneDigits,
@@ -352,12 +482,17 @@ export class WhatsAppClient {
                     console.log(`[AI-CONV] Iniciando: ${processed.phoneDigits} - ${decision.reason}`);
                     handledByAI = await this.aiConversation.startConversation(
                       processed.phoneDigits,
-                      contact
+                      contact,
+                      processed.text // Pasar el mensaje inicial para contexto
                     );
                   } else {
                     console.log(`[AI-CONV] No iniciar: ${processed.phoneDigits} - ${decision.reason}`);
                   }
+                } else {
+                  console.log(`[AI] No elegible para IA: ${processed.phoneDigits}`);
                 }
+              } else {
+                console.log(`[AI] AIConversation no disponible`);
               }
 
               // Si no lo manejo AIConversation, usar el motor de secuencias normal
@@ -520,24 +655,84 @@ export class WhatsAppClient {
   }
 
   /**
-   * Elimina la carpeta de autenticacion
+   * Programa un retry para un mensaje con descifrado fallido
    */
+  private _scheduleMessageRetry(key: any, jid: string, timestamp: number): void {
+    const msgId = key?.id;
+    if (!msgId) return;
+
+    if (this._failedMessages.has(msgId)) {
+      const existing = this._failedMessages.get(msgId)!;
+      if (existing.retryCount >= 3) {
+        console.log(`[MSG-RETRY] ${msgId.slice(0, 20)}... max intentos alcanzado`);
+        this._failedMessages.delete(msgId);
+        return;
+      }
+      existing.retryCount++;
+    } else {
+      this._failedMessages.set(msgId, {
+        key,
+        jid,
+        timestamp,
+        retryCount: 1,
+      });
+    }
+
+    if (!this._retryTimer) {
+      this._retryTimer = setTimeout(() => this._processFailedMessages(), 5000);
+      this._retryTimer.unref?.();
+    }
+  }
+
+  /**
+   * Procesa mensajes fallidos solicitando re-envío
+   */
+  private async _processFailedMessages(): Promise<void> {
+    this._retryTimer = null;
+
+    if (!this.sock || this._failedMessages.size === 0) return;
+
+    const toProcess = Array.from(this._failedMessages.entries()).slice(0, 5);
+    console.log(`[MSG-RETRY] Procesando ${toProcess.length} mensaje(s) fallido(s)`);
+
+    for (const [msgId, failed] of toProcess) {
+      try {
+        const sockAny = this.sock as any;
+        if (sockAny.requestPlaceholderResend) {
+          console.log(`[MSG-RETRY] Solicitando re-envío: ${msgId.slice(0, 20)}... (intento ${failed.retryCount})`);
+          await sockAny.requestPlaceholderResend(failed.key);
+        } else if (sockAny.fetchMessageHistory) {
+          console.log(`[MSG-RETRY] Solicitando historial: ${msgId.slice(0, 20)}... (intento ${failed.retryCount})`);
+          await sockAny.fetchMessageHistory(1, failed.key, failed.timestamp * 1000);
+        } else {
+          console.log(`[MSG-RETRY] No hay método de retry disponible`);
+          this._failedMessages.delete(msgId);
+        }
+      } catch (e: any) {
+        console.error(`[MSG-RETRY] Error:`, e?.message || e);
+        const entry = this._failedMessages.get(msgId);
+        if (entry && entry.retryCount >= 3) {
+          this._failedMessages.delete(msgId);
+        }
+      }
+    }
+
+    if (this._failedMessages.size > 0 && !this._retryTimer) {
+      this._retryTimer = setTimeout(() => this._processFailedMessages(), 10000);
+      this._retryTimer.unref?.();
+    }
+  }
+
   wipeAuth(): void {
     if (fs.existsSync(this.authFolder)) {
       fs.rmSync(this.authFolder, { recursive: true, force: true });
     }
   }
 
-  /**
-   * Obtiene el socket actual
-   */
   getSocket(): WASocket | null {
     return this.sock;
   }
 
-  /**
-   * Limpia recursos
-   */
   cleanup(): void {
     if (this._pollTimer) {
       clearInterval(this._pollTimer);
@@ -551,6 +746,12 @@ export class WhatsAppClient {
       clearTimeout(this._reconnectTimer);
       this._reconnectTimer = null;
     }
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
+    this._failedMessages.clear();
+    this._messageStore.clear();
     this._destroySocket();
     this.dataStore.cleanup();
   }
