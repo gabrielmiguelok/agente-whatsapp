@@ -78,19 +78,29 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const allowedFields = [
-      'phone', 'name', 'action_status', 'sequence_status', 'message_to_send',
-      'seguimiento', 'email', 'accion', 'zona', 'presupuesto'
-    ];
-    if (!allowedFields.includes(field)) {
+    const protectedFields = ['id', 'created_at', 'updated_at', 'instance_email'];
+    if (protectedFields.includes(field)) {
       return NextResponse.json(
-        { success: false, error: `Campo no permitido: ${field}` },
+        { success: false, error: `Campo protegido: ${field}` },
+        { status: 400 }
+      );
+    }
+
+    const [columns] = await pool.execute<RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contacts' AND COLUMN_NAME = ?`,
+      [field]
+    );
+
+    if ((columns as any[]).length === 0) {
+      return NextResponse.json(
+        { success: false, error: `Campo no existe: ${field}` },
         { status: 400 }
       );
     }
 
     const [result] = await pool.execute<ResultSetHeader>(
-      `UPDATE contacts SET ${field} = ? WHERE id = ?`,
+      `UPDATE contacts SET \`${field}\` = ? WHERE id = ?`,
       [value, id]
     );
 
