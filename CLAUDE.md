@@ -369,13 +369,32 @@ const miTablaColumns = buildColumnsFromDefinition({
 
 ```
 Next.js API Routes + WhatsAppSessionManager (singleton)
-    ├── Single "default" session (auto-created)
+    ├── Single "crm-onia" session (auto-started via instrumentation.ts)
     ├── Shared triggersMap across all sessions
     └── Per-session: DataStore, SendQueue, SequenceEngine, AIConversation, WhatsAppClient
 
+Auto-start: instrumentation.ts inicia la sesión automáticamente al arrancar Next.js
 Polling: UI polls /api/whatsapp/sessions every 2 seconds for status updates
 Session state stored in memory (WhatsAppSessionManager)
 ```
+
+### Auto-Start (instrumentation.ts)
+
+El archivo `instrumentation.ts` inicia la sesión de WhatsApp automáticamente:
+
+```typescript
+// Ejecutado al iniciar Next.js
+setTimeout(async () => {
+  const manager = getSessionManager();
+  await manager.startSession(SESSION_ID); // 'crm-onia'
+}, 3000);
+```
+
+**Características:**
+- Delay de 3s para esperar carga completa de Next.js
+- Manejo de SIGINT/SIGTERM para cleanup graceful
+- Captura errores globales (unhandledRejection, uncaughtException)
+- Variable `WHATSAPP_SESSION_ID` configurable (default: 'crm-onia')
 
 ### Message Flow
 
@@ -412,12 +431,17 @@ SequenceLog.startSequence() + silence detection loop
 ## Important Constants (lib/whatsapp/config.ts)
 
 ```typescript
-SEQUENCES_ENABLED = false       // Feature flag: enable/disable auto-sequences
+SEQUENCES_ENABLED = true        // Feature flag: enable/disable auto-sequences
 WAIT_SILENCE_MS = 20_000        // Silence between sequence steps
 BETWEEN_SUB_MS = 2_000          // Delay between sub-messages
 SEND_RATE_MIN_DELAY_MS = 2000   // Rate limit
 OUTBOX_MAX_ATTEMPTS = 8         // Max retries
 POLL_INTERVAL_MS = 60_000       // Agenda poll interval
+
+// Reconexión robusta
+REPLACED_RETRY_LIMIT = 3        // Intentos antes de parar (ventana de 120s)
+REPLACED_WINDOW_MS = 120_000    // Ventana de tiempo para contar REPLACED
+AUTO_FORCE_NEW_ON_PERSISTENT_REPLACED = false  // No re-vincular automáticamente
 ```
 
 **Note:** When `SEQUENCES_ENABLED = false`:
@@ -576,7 +600,7 @@ Panel de administración con CustomTable mostrando usuarios del sistema:
 1. **Method signatures** in `DataStore`, `SequenceEngine`, `WhatsAppClient`, `AIConversation`
 2. **DB column names** hardcoded in models (zona, accion, presupuesto)
 3. **Dedup key format**: `WA:{id}` or `GEN:{hash}`
-4. **JID format**: Always `{phone}@s.whatsapp.net` for 1:1 chats
+4. **JID format**: `{phone}@s.whatsapp.net` para personal, `{phone}@lid` para WhatsApp Business
 5. **serverExternalPackages** in next.config.js - Required for Baileys/ws
 6. **AIConversation state**: `conversations` Map keys are phone digits, not JIDs
 7. **Auth paths**: `auth-ts/{email}/` for WhatsApp credentials (excluded from git)
@@ -584,6 +608,10 @@ Panel de administración con CustomTable mostrando usuarios del sistema:
 9. **ForeignKey pattern**: `foreignKeyField` stores ID, `displayField` shows name from JOIN
 10. **SEQUENCES_ENABLED flag**: Controls SequenceEngine in `WhatsAppClient.ts`
 11. **shouldStartConversation()**: Must use this method (not deprecated isTrigger()) for AI decision
+12. **startConversation(phone, contact, initialMessage)**: Pasar mensaje inicial para contexto
+13. **AIConversation message buffer**: BUFFER_WAIT_MS = 10s de silencio antes de responder
+14. **WhatsAppClient._stoppedDueToReplaced**: Bloquea reconexión tras conflicto REPLACED
+15. **resetReplacedBlock()**: Llamar para permitir reconexión manual tras REPLACED
 
 ## Conventions
 
@@ -610,6 +638,9 @@ OPENAI_API_KEY=<openai_key>       # Para conversaciones con IA
 JWT_SECRET=<jwt_secret>
 DEFAULT_ADMIN_EMAIL=<admin_email>
 DEFAULT_ADMIN_PASSWORD=<admin_password>
+
+# WhatsApp (opcional)
+WHATSAPP_SESSION_ID=crm-onia    # ID de sesión para auto-start
 ```
 
 ## Database Access
