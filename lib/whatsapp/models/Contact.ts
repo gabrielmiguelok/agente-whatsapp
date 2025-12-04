@@ -59,9 +59,9 @@ export class Contact {
       // Crear nuevo
       console.log(`[Contact] Creando nuevo contacto: ${phoneDigits}`);
       const [result] = await pool.execute<ResultSetHeader>(
-        `INSERT INTO contacts (phone, name, action_status, sequence_status, instance_email)
-         VALUES (?, ?, ?, ?, ?)`,
-        [phoneDigits, '', 'PENDIENTE', 'NO INICIADA', instanceEmail || null]
+        `INSERT INTO contacts (phone, name, action_status, sequence_status, instance_email, seguimiento)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [phoneDigits, '', 'PENDIENTE', 'NO INICIADA', instanceEmail || null, 'SEGUIMIENTO 1']
       );
 
       contact = {
@@ -71,7 +71,7 @@ export class Contact {
         action_status: 'PENDIENTE',
         sequence_status: 'NO INICIADA',
         message_to_send: null,
-        seguimiento: null,
+        seguimiento: 'SEGUIMIENTO 1',
         email: null,
         accion: null,
         zona: null,

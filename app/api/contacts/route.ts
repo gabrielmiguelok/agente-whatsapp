@@ -35,14 +35,15 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await pool.execute<ResultSetHeader>(
-      `INSERT INTO contacts (phone, name, action_status, sequence_status, message_to_send)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO contacts (phone, name, action_status, sequence_status, message_to_send, seguimiento)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         phone,
         name || null,
         action_status || 'PENDIENTE',
         sequence_status || 'NO INICIADA',
-        message_to_send || null
+        message_to_send || null,
+        'SEGUIMIENTO 1'
       ]
     );
 
