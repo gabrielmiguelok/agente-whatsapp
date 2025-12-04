@@ -236,7 +236,7 @@ export interface IAIConversation {
   isEligible(phone: string): boolean;
   isTrigger(text: string): boolean;
   hasActiveConversation(phone: string): boolean;
-  startConversation(phone: string, contact?: Contact | null): Promise<boolean>;
+  startConversation(phone: string, contact?: Contact | null, initialMessage?: string): Promise<boolean>;
   processMessage(phone: string, text: string, contact?: Contact | null): Promise<boolean>;
   cancelConversation(phone: string): void;
   healthCheck(): Promise<boolean>;
