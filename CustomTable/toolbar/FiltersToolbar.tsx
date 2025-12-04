@@ -6,8 +6,8 @@
 
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
-import { IconButton, Tooltip, TextField, Menu, MenuItem, Divider } from "@mui/material"
-import { Moon, Sun, ChevronLeft, ChevronRight, Plus, Save, Check, LayoutGrid, Table2, ChevronDown } from "lucide-react"
+import { IconButton, Tooltip, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material"
+import { Moon, Sun, ChevronLeft, ChevronRight, Plus, Save, Check, LayoutGrid, Table2, ChevronDown, Columns3 } from "lucide-react"
 
 export type AddRecordState = 'idle' | 'adding' | 'saving' | 'confirmed';
 export type ViewMode = 'table' | 'board';
@@ -30,15 +30,14 @@ export interface FiltersToolbarProps {
     total: number
     onPageChange: (page: number) => void
   }
-  // Nueva prop para agregar registros
   onAddRecord?: () => void
   addRecordState?: AddRecordState
-  // Nuevas props para vista de tablero
   viewMode?: ViewMode
   onViewModeChange?: (mode: ViewMode) => void
   selectFields?: SelectFieldOption[]
   groupByField?: string
   onGroupByFieldChange?: (field: string) => void
+  onAddColumn?: (columnName: string) => Promise<boolean>
 }
 
 export default function FiltersToolbar({
@@ -56,9 +55,14 @@ export default function FiltersToolbar({
   selectFields = [],
   groupByField,
   onGroupByFieldChange,
+  onAddColumn,
 }: FiltersToolbarProps) {
   const [viewMenuAnchor, setViewMenuAnchor] = useState<HTMLElement | null>(null);
   const viewMenuOpen = Boolean(viewMenuAnchor);
+
+  const [addColumnDialogOpen, setAddColumnDialogOpen] = useState(false);
+  const [newColumnName, setNewColumnName] = useState('');
+  const [addColumnLoading, setAddColumnLoading] = useState(false);
 
   const handleThemeToggle = () => {
     if (onThemeToggle) onThemeToggle()
@@ -87,6 +91,20 @@ export default function FiltersToolbar({
       onViewModeChange('board');
     }
     handleViewMenuClose();
+  };
+
+  const handleAddColumnSubmit = async () => {
+    if (!newColumnName.trim() || !onAddColumn) return;
+    setAddColumnLoading(true);
+    try {
+      const success = await onAddColumn(newColumnName.trim());
+      if (success) {
+        setNewColumnName('');
+        setAddColumnDialogOpen(false);
+      }
+    } finally {
+      setAddColumnLoading(false);
+    }
   };
 
   // Theme colors
@@ -157,6 +175,124 @@ export default function FiltersToolbar({
           },
         }}
       />
+
+      {/* Agregar nueva columna */}
+      {onAddColumn && (
+        <Tooltip title="Agregar nueva columna" arrow>
+          <IconButton
+            size="small"
+            onClick={() => setAddColumnDialogOpen(true)}
+            sx={{
+              color: '#10b981',
+              '&:hover': {
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              },
+            }}
+            aria-label="Agregar columna"
+          >
+            <Columns3 size={18} />
+          </IconButton>
+        </Tooltip>
+      )}
+
+      {/* Dialog para agregar columna */}
+      <Dialog
+        open={addColumnDialogOpen}
+        onClose={() => !addColumnLoading && setAddColumnDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          backdrop: {
+            style: { backgroundColor: 'rgba(0,0,0,0.5)' }
+          }
+        }}
+        sx={{
+          zIndex: 99999,
+          '& .MuiDialog-paper': {
+            backgroundColor: isDarkMode ? 'oklch(0.18 0.01 240)' : '#ffffff',
+            borderRadius: '12px',
+          },
+        }}
+      >
+        <DialogTitle sx={{
+          color: isDarkMode ? 'oklch(0.98 0.002 240)' : '#1f2937',
+          fontWeight: 600,
+          fontSize: '16px',
+        }}>
+          Nueva columna
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            variant="outlined"
+            size="small"
+            placeholder="Nombre de la columna"
+            value={newColumnName}
+            onChange={(e) => setNewColumnName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newColumnName.trim()) {
+                handleAddColumnSubmit();
+              }
+            }}
+            disabled={addColumnLoading}
+            sx={{
+              mt: 1,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: isDarkMode ? 'oklch(0.14 0.01 240)' : '#f9fafb',
+                '& fieldset': {
+                  borderColor: isDarkMode ? 'oklch(0.25 0.02 240)' : '#e5e7eb',
+                },
+                '&:hover fieldset': {
+                  borderColor: '#127CF3',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: '#127CF3',
+                },
+              },
+              '& input': {
+                color: isDarkMode ? 'oklch(0.98 0.002 240)' : '#1f2937',
+              },
+            }}
+          />
+          <p style={{
+            fontSize: '12px',
+            color: isDarkMode ? 'oklch(0.6 0.02 240)' : '#6b7280',
+            marginTop: '8px',
+          }}>
+            Se creará un nuevo campo en la tabla de contactos
+          </p>
+        </DialogContent>
+        <DialogActions sx={{ padding: '12px 24px 16px' }}>
+          <Button
+            onClick={() => setAddColumnDialogOpen(false)}
+            disabled={addColumnLoading}
+            sx={{
+              color: isDarkMode ? 'oklch(0.7 0.02 240)' : '#6b7280',
+              textTransform: 'none',
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleAddColumnSubmit}
+            disabled={!newColumnName.trim() || addColumnLoading}
+            variant="contained"
+            sx={{
+              backgroundColor: '#127CF3',
+              textTransform: 'none',
+              '&:hover': {
+                backgroundColor: '#0f6ad3',
+              },
+              '&.Mui-disabled': {
+                backgroundColor: isDarkMode ? 'oklch(0.25 0.02 240)' : '#e5e7eb',
+              },
+            }}
+          >
+            {addColumnLoading ? 'Creando...' : 'Crear columna'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {paginationInfo && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "auto" }}>
