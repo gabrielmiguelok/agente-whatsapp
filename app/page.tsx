@@ -15,7 +15,7 @@ import type { SessionStatus as StatusType } from '@/lib/whatsapp/types';
 import type { PromptConfig } from '@/lib/whatsapp/types/promptConfig';
 import { useRouter } from 'next/navigation';
 
-const SESSION_ID = 'default';
+const SESSION_ID = 'crm-onia';
 const CONTACTS_DYNAMIC_FIELDS = ['seguimiento', 'accion', 'zona'];
 
 const contactsColumns = buildColumnsFromDefinition({

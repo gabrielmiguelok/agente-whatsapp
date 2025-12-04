@@ -11,7 +11,7 @@ import { QRDisplay, SessionStatus } from '@/components/whatsapp';
 import type { SessionStatus as StatusType } from '@/lib/whatsapp/types';
 
 // Identificador fijo para la sesión única
-const SESSION_ID = 'default';
+const SESSION_ID = 'crm-onia';
 
 interface SessionData {
   email: string;
