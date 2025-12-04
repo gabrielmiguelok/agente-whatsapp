@@ -193,6 +193,23 @@ class WhatsAppSessionManagerImpl {
       return session.state;
     }
 
+    if (session.state.status === 'connecting') {
+      console.log(`[SessionManager] Sesion ya conectando: ${email}`);
+      return session.state;
+    }
+
+    if (session.state.status === 'qr_pending') {
+      console.log(`[SessionManager] Sesion esperando QR: ${email}`);
+      return session.state;
+    }
+
+    if (session.client.initialized) {
+      console.log(`[SessionManager] Cliente ya inicializado: ${email}`);
+      return session.state;
+    }
+
+    session.client.resetReplacedBlock();
+
     console.log(`[SessionManager] Iniciando sesion: ${email}`);
     session.state.status = 'connecting';
 
@@ -211,7 +228,10 @@ class WhatsAppSessionManagerImpl {
       return;
     }
 
-    console.log(`[SessionManager] Deteniendo sesion: ${email}`);
+    const stack = new Error().stack || '';
+    const caller = stack.split('\n').slice(2, 4).join(' <- ');
+    console.log(`[SessionManager] Deteniendo sesion: ${email} (caller: ${caller.slice(0, 100)})`);
+
     session.client.cleanup();
     session.state.status = 'disconnected';
 
@@ -228,7 +248,10 @@ class WhatsAppSessionManagerImpl {
       return;
     }
 
-    console.log(`[SessionManager] Logout sesion: ${email}`);
+    const stack = new Error().stack || '';
+    const caller = stack.split('\n').slice(2, 4).join(' <- ');
+    console.log(`[SessionManager] Logout sesion: ${email} (caller: ${caller.slice(0, 100)})`);
+
     session.client.cleanup();
     session.client.wipeAuth();
     session.state.status = 'disconnected';
@@ -242,6 +265,10 @@ class WhatsAppSessionManagerImpl {
    * Elimina una sesion completamente
    */
   async deleteSession(email: string): Promise<void> {
+    const stack = new Error().stack || '';
+    const caller = stack.split('\n').slice(2, 4).join(' <- ');
+    console.log(`[SessionManager] Eliminando sesion: ${email} (caller: ${caller.slice(0, 100)})`);
+
     await this.logoutSession(email);
     this.sessions.delete(email);
     await WhatsAppSessionModel.delete(email);
