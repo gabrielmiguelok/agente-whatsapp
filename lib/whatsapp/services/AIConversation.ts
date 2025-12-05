@@ -48,6 +48,9 @@ export class AIConversation implements IAIConversation {
   private messageBuffer: Map<string, { messages: string[]; timer: NodeJS.Timeout | null }> = new Map();
   private BUFFER_WAIT_MS = 10000; // Esperar 10 segundos de silencio antes de responder
 
+  // Tracking de última pregunta por campo (para respuestas cortas como "Sí")
+  private lastAskedField: Map<string, string> = new Map();
+
   constructor(sendQueue: ISendQueue, openaiApiKey: string, options: AIConversationOptions = {}) {
     this.sendQueue = sendQueue;
     this.apiKey = openaiApiKey;
@@ -227,7 +230,7 @@ export class AIConversation implements IAIConversation {
   }
 
   /**
-   * Crea una nueva conversación
+   * Crea una nueva conversación con datos dinámicos según config
    */
   private _createConversation(phone: string, contact: ContactType | null): ConversationState {
     let clientName: string | null = null;
@@ -235,16 +238,19 @@ export class AIConversation implements IAIConversation {
       clientName = contact.name.trim();
     }
 
+    const config = this._getConfig();
+    const data: Record<string, string | number | null> = {};
+
+    for (const field of config.mission_fields) {
+      data[field.key] = null;
+    }
+
     return {
       phone,
       clientName,
       active: true,
       history: [],
-      data: {
-        zona: null,
-        accion: null,
-        presupuesto: null,
-      },
+      data: data as any,
       lastActivity: Date.now(),
     };
   }
@@ -329,6 +335,21 @@ ${(config.mission_complete_message || '').replace(/\\n/g, '\n').split('\n').map(
 ESTRATEGIA DE CONVERSACIÓN:
 ${(config.conversation_strategy || '').replace(/\\n/g, '\n').split('\n').map(line => `- ${line.trim()}`).filter(l => l !== '-').join('\n')}
 ${questionExamplesText}
+
+ORDEN DE PREGUNTAS - PRIORIDAD INTELIGENTE:
+Analizá los datos que te faltan y decidí cuál preguntar PRIMERO según esta lógica:
+
+1. **DATOS DE IDENTIDAD PRIMERO**: Si falta nombre, email o cualquier dato que identifique a la persona → SIEMPRE preguntá esto PRIMERO. Presentate y pedí el dato. Es descortés hablar sin saber con quién hablás.
+
+2. **DATOS PERSONALES SEGUNDO**: Datos sobre la persona (familia, situación, preferencias personales).
+
+3. **DATOS DE NEGOCIO AL FINAL**: Zona, presupuesto, tipo de operación, características técnicas.
+
+REGLA DE ORO: Aunque el cliente mencione algo técnico ("quiero comprar una casa"), vos PRIMERO te presentás y preguntás cómo se llama. Podés reconocer brevemente lo que dijo, pero NO avances a preguntar datos técnicos sin antes saber el nombre.
+
+Ejemplo correcto:
+- Cliente: "Hola, quiero comprar una casa"
+- Vos: "¡Hola! Qué bueno que estés buscando 😊 Soy Ana, asistente de [inmobiliaria]. ¿Con quién tengo el gusto de hablar?"
 `}
 
 REGLAS INQUEBRANTABLES (SEGUÍ TODAS AL PIE DE LA LETRA):
@@ -348,19 +369,18 @@ Respondé ÚNICAMENTE con el mensaje para el cliente. Nada más.`;
   }
 
   /**
-   * Prompt para análisis de datos - VERSIÓN DINÁMICA
-   * Usa la configuración personalizable de la base de datos
+   * Prompt para análisis de datos - VERSIÓN DINÁMICA CON CONTEXTO
+   * Usa la configuración personalizable y el historial de conversación
    */
-  private _buildAnalysisPrompt(text: string, conv: ConversationState): string {
+  private _buildAnalysisPrompt(text: string, conv: ConversationState, phone: string): string {
     const config = this._getConfig();
+    const lastAsked = this.lastAskedField.get(phone);
 
-    // Construir contexto de datos ya obtenidos
     const contextLines = config.mission_fields.map(field => {
-      const value = conv.data[field.key as keyof typeof conv.data];
+      const value = (conv.data as Record<string, any>)[field.key];
       return `- ${field.label}: ${value || 'NO OBTENIDO/A'}`;
     });
 
-    // Construir instrucciones de extracción
     const extractionInstructions = config.mission_fields.map((field, i) => {
       const rule = config.extraction_rules?.[field.key] || field.description;
       let typeHint = '';
@@ -376,7 +396,6 @@ Respondé ÚNICAMENTE con el mensaje para el cliente. Nada más.`;
    - ${rule}`;
     });
 
-    // Construir formato JSON esperado
     const jsonFormat = config.mission_fields
       .map(f => {
         if (f.type === 'number') return `"${f.key}": número o null`;
@@ -385,48 +404,73 @@ Respondé ÚNICAMENTE con el mensaje para el cliente. Nada más.`;
       })
       .join(', ');
 
-    return `TAREA: Analizar este mensaje y extraer información SIGUIENDO LAS REGLAS AL PIE DE LA LETRA.
+    const lastMessages = conv.history.slice(-4).map(m => `${m.role === 'user' ? 'CLIENTE' : 'ASISTENTE'}: ${m.content}`).join('\n');
 
-MENSAJE DEL CLIENTE: "${text}"
+    let contextHint = '';
+    if (lastAsked) {
+      const askedField = config.mission_fields.find(f => f.key === lastAsked);
+      if (askedField) {
+        contextHint = `
+CONTEXTO CRÍTICO: La última pregunta del asistente fue sobre "${askedField.label}" (${askedField.description}).
+Si el cliente responde "sí", "si", "sep", "claro", "obvio", "dale", "ok", "ajá", "aha", "no", "nop", "nope", "nel", "para nada", o cualquier afirmación/negación corta,
+esa respuesta ES PARA EL CAMPO "${askedField.key}".
 
-CONTEXTO - DATOS YA OBTENIDOS:
+Para campos de tipo SÍ/NO o boolean:
+- Respuestas afirmativas (sí, si, sep, claro, obvio, dale, ok, ajá, seguro, por supuesto) → guardar "SI" o el valor positivo
+- Respuestas negativas (no, nop, nope, nel, para nada, negativo) → guardar "NO" o el valor negativo
+`;
+      }
+    }
+
+    return `TAREA: Analizar mensaje del cliente y extraer información. IMPORTANTE: Considerar el CONTEXTO de la conversación.
+
+HISTORIAL RECIENTE:
+${lastMessages || 'Sin historial previo'}
+
+MENSAJE ACTUAL DEL CLIENTE: "${text}"
+${contextHint}
+
+DATOS YA OBTENIDOS:
 ${contextLines.join('\n')}
 
-REGLAS DE EXTRACCIÓN (OBLIGATORIAS):
+REGLAS DE EXTRACCIÓN:
 
 ${extractionInstructions.join('\n\n')}
 
 IMPORTANTE PARA PRESUPUESTO:
-- Si el cliente menciona "pesos", "ARS" o moneda argentina, convertir a dólares usando tipo de cambio 1200 ARS = 1 USD.
-  Ejemplos: "145 millones de pesos" = 145000000 / 1200 = 120833 USD. "300 mil pesos" = 300000 / 1200 = 250 USD.
-- Si dice "lucas", "k", o números sin especificar moneda en Argentina, asumir que son PESOS y convertir.
-- Si dice explícitamente "dólares", "USD", "dolares", dejar el número tal cual.
-- El resultado SIEMPRE debe ser en dólares (número entero, sin símbolo).
-- Para números grandes tipo "145000000 pesos", el resultado debe ser ~120000 USD, NO 100 USD.
+- Si menciona "pesos", "ARS" → convertir a USD (1200 ARS = 1 USD)
+- "lucas", "k" sin moneda en Argentina → asumir pesos y convertir
+- "dólares", "USD" → dejar el número tal cual
+- Resultado SIEMPRE en dólares (número entero)
+
+IMPORTANTE PARA RESPUESTAS CORTAS:
+- "Sí", "No", "Claro", "Dale", etc. → INTERPRETAR según el contexto de la última pregunta
+- Si se preguntó por hijos y responde "sí" → significa que SÍ tiene hijos
+- Si se preguntó por zona y responde "centro" → es la zona
 
 RESPUESTA: JSON exacto, sin explicaciones ni markdown:
 {${jsonFormat}}`;
   }
 
   /**
-   * Analiza el mensaje y extrae datos con IA - VERSIÓN ROBUSTA
+   * Analiza el mensaje y extrae datos con IA - VERSIÓN DINÁMICA
    */
-  private async _analyzeMessage(text: string, conv: ConversationState): Promise<AIAnalysisResult | null> {
-    const analysisPrompt = this._buildAnalysisPrompt(text, conv);
+  private async _analyzeMessage(text: string, conv: ConversationState, phone: string): Promise<Record<string, any> | null> {
+    const config = this._getConfig();
+    const analysisPrompt = this._buildAnalysisPrompt(text, conv, phone);
 
     const result = await this._callGPT(
       [
-        { role: 'system', content: 'Sos un extractor de datos preciso. Respondé SOLO con JSON válido, sin markdown ni explicaciones.' },
+        { role: 'system', content: 'Sos un extractor de datos preciso. Respondé SOLO con JSON válido, sin markdown ni explicaciones. SIEMPRE considerá el contexto de la conversación para interpretar respuestas cortas.' },
         { role: 'user', content: analysisPrompt },
       ],
-      0,
-      150
+      0.1,
+      200
     );
 
     if (!result) return null;
 
     try {
-      // Limpiar posibles artefactos de markdown
       const cleaned = result
         .replace(/```json\n?/g, '')
         .replace(/\n?```/g, '')
@@ -434,31 +478,32 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
         .replace(/[^}]*$/, '')
         .trim();
 
-      const parsed = JSON.parse(cleaned) as AIAnalysisResult;
+      const parsed = JSON.parse(cleaned) as Record<string, any>;
+      const validated: Record<string, any> = {};
 
-      // Validar y limpiar datos
-      if (parsed.zona && typeof parsed.zona === 'string') {
-        parsed.zona = parsed.zona.trim();
-        if (parsed.zona.toLowerCase() === 'null' || parsed.zona === '') {
-          parsed.zona = null;
+      for (const field of config.mission_fields) {
+        let value = parsed[field.key];
+
+        if (value === undefined || value === null || value === 'null' || value === '') {
+          validated[field.key] = null;
+          continue;
         }
-      }
 
-      if (parsed.accion && typeof parsed.accion === 'string') {
-        const accionUpper = parsed.accion.toUpperCase().trim();
-        if (accionUpper === 'COMPRA' || accionUpper === 'ALQUILER') {
-          parsed.accion = accionUpper;
+        if (field.type === 'number') {
+          const num = Number(value);
+          validated[field.key] = isNaN(num) || num <= 0 ? null : Math.round(num);
+        } else if (field.type === 'enum' && field.values) {
+          const upper = String(value).toUpperCase().trim();
+          const matched = field.values.find(v => v.toUpperCase() === upper);
+          validated[field.key] = matched || null;
         } else {
-          parsed.accion = null;
+          const strVal = String(value).trim();
+          validated[field.key] = strVal.toLowerCase() === 'null' ? null : strVal;
         }
       }
 
-      if (parsed.presupuesto !== null && parsed.presupuesto !== undefined) {
-        const num = Number(parsed.presupuesto);
-        parsed.presupuesto = isNaN(num) || num <= 0 ? null : Math.round(num);
-      }
-
-      return parsed;
+      console.log('[AI-CONV] Análisis resultado:', validated);
+      return validated;
     } catch (e: any) {
       console.error('[AI-CONV] Error parseando análisis:', e.message, 'Raw:', result);
       return null;
@@ -540,36 +585,27 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
 
     const conv = this._createConversation(phone, contact);
     this.conversations.set(phone, conv);
+    const config = this._getConfig();
 
-    // Analizar el mensaje inicial para extraer datos si los hay
     if (initialMessage) {
-      const analysis = await this._analyzeMessage(initialMessage, conv);
+      const analysis = await this._analyzeMessage(initialMessage, conv, phone);
       if (analysis) {
-        if (analysis.zona && !conv.data.zona) {
-          conv.data.zona = analysis.zona;
-          await Contact.updateZona(phone, analysis.zona);
-          console.log(`[AI-CONV] ✓ Zona detectada en mensaje inicial: ${analysis.zona}`);
-        }
-        if (analysis.accion && !conv.data.accion) {
-          conv.data.accion = analysis.accion;
-          await Contact.updateAccion(phone, analysis.accion);
-          console.log(`[AI-CONV] ✓ Operación detectada en mensaje inicial: ${analysis.accion}`);
-        }
-        if (analysis.presupuesto && !conv.data.presupuesto) {
-          conv.data.presupuesto = analysis.presupuesto;
-          await Contact.updatePresupuesto(phone, analysis.presupuesto);
-          console.log(`[AI-CONV] ✓ Presupuesto detectado en mensaje inicial: ${analysis.presupuesto}`);
+        for (const field of config.mission_fields) {
+          const value = analysis[field.key];
+          const currentValue = (conv.data as Record<string, any>)[field.key];
+          if (value && !currentValue) {
+            (conv.data as Record<string, any>)[field.key] = value;
+            await Contact.updateDynamicField(phone, field.dbColumn, value);
+            console.log(`[AI-CONV] ✓ ${field.label} detectado en mensaje inicial: ${value}`);
+          }
         }
       }
 
-      // Agregar mensaje inicial al historial
       conv.history.push({ role: 'user', content: initialMessage });
     }
 
-    // Simular que está escribiendo
     await Utils.sleep(this.TYPING_DELAY_MS);
 
-    // Generar respuesta con IA - incluyendo contexto del mensaje inicial
     const userPrompt = initialMessage
       ? `El cliente envió este mensaje: "${initialMessage}". Respondé de forma natural al contenido de su mensaje, saludando y continuando la conversación según lo que escribió.`
       : 'El cliente acaba de saludar. Respondé con un saludo cálido, presentate brevemente y preguntá en qué podés ayudarlo con su búsqueda inmobiliaria.';
@@ -579,7 +615,6 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
       { role: 'user', content: userPrompt },
     ]);
 
-    // Fallback si falla GPT
     if (!response) {
       response = this._getFallbackResponse(conv);
     }
@@ -587,7 +622,36 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
     conv.history.push({ role: 'assistant', content: response });
     await this._sendMessage(phone, response);
 
+    this._detectAskedField(response, phone);
+
     return true;
+  }
+
+  /**
+   * Detecta qué campo se preguntó en el mensaje del asistente
+   * para poder interpretar respuestas cortas como "Sí"
+   */
+  private _detectAskedField(assistantMessage: string, phone: string): void {
+    const config = this._getConfig();
+    const msgLower = assistantMessage.toLowerCase();
+
+    for (const field of config.mission_fields) {
+      const examples = config.question_examples?.[field.key] || [];
+      const labelLower = field.label.toLowerCase();
+      const descLower = field.description.toLowerCase();
+
+      const isAsking = examples.some(ex => {
+        const exLower = ex.toLowerCase();
+        const words = exLower.split(/\s+/).filter(w => w.length > 3);
+        return words.some(word => msgLower.includes(word));
+      }) || msgLower.includes(labelLower) || msgLower.includes(descLower);
+
+      if (isAsking) {
+        this.lastAskedField.set(phone, field.key);
+        console.log(`[AI-CONV] Detectada pregunta sobre: ${field.key}`);
+        return;
+      }
+    }
   }
 
   /**
@@ -631,7 +695,7 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
   }
 
   /**
-   * Procesa todos los mensajes acumulados en el buffer
+   * Procesa todos los mensajes acumulados en el buffer - VERSIÓN DINÁMICA
    */
   private async _processBufferedMessages(
     phone: string,
@@ -646,45 +710,34 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
       return;
     }
 
-    // Combinar todos los mensajes del buffer
+    const config = this._getConfig();
     const combinedText = buffer.messages.join('\n');
     const messageCount = buffer.messages.length;
 
     console.log(`[AI-CONV] Procesando ${messageCount} mensaje(s) de ${phone}`);
 
-    // Limpiar buffer
     buffer.messages = [];
     buffer.timer = null;
     this.messageBuffer.delete(phone);
 
-    // Agregar mensajes al historial
     conv.history.push({ role: 'user', content: combinedText });
 
-    // Simular lectura
     await Utils.sleep(this.TYPING_DELAY_MS);
 
-    // Analizar mensaje para extraer datos (SIEMPRE, antes de responder)
-    const analysis = await this._analyzeMessage(combinedText, conv);
+    const analysis = await this._analyzeMessage(combinedText, conv, phone);
 
     if (analysis) {
-      if (analysis.zona && !conv.data.zona) {
-        conv.data.zona = analysis.zona;
-        await Contact.updateZona(phone, analysis.zona);
-        console.log(`[AI-CONV] ✓ Zona detectada: ${analysis.zona}`);
-      }
-      if (analysis.accion && !conv.data.accion) {
-        conv.data.accion = analysis.accion;
-        await Contact.updateAccion(phone, analysis.accion);
-        console.log(`[AI-CONV] ✓ Operación detectada: ${analysis.accion}`);
-      }
-      if (analysis.presupuesto && !conv.data.presupuesto) {
-        conv.data.presupuesto = analysis.presupuesto;
-        await Contact.updatePresupuesto(phone, analysis.presupuesto);
-        console.log(`[AI-CONV] ✓ Presupuesto detectado: ${analysis.presupuesto}`);
+      for (const field of config.mission_fields) {
+        const value = analysis[field.key];
+        const currentValue = (conv.data as Record<string, any>)[field.key];
+        if (value && !currentValue) {
+          (conv.data as Record<string, any>)[field.key] = value;
+          await Contact.updateDynamicField(phone, field.dbColumn, value);
+          console.log(`[AI-CONV] ✓ ${field.label} detectado: ${value}`);
+        }
       }
     }
 
-    // Generar respuesta conversacional
     const systemPrompt = this._buildSystemPrompt(conv);
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -693,7 +746,6 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
 
     let response = await this._callGPT(messages);
 
-    // Fallback robusto si falla GPT
     if (!response) {
       console.warn('[AI-CONV] GPT falló, usando fallback');
       response = this._getFallbackResponse(conv);
@@ -702,20 +754,23 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
     conv.history.push({ role: 'assistant', content: response });
     await this._sendMessage(phone, response);
 
-    // Verificar si completamos la misión
-    const misionCompleta = conv.data.zona && conv.data.accion && conv.data.presupuesto;
+    this._detectAskedField(response, phone);
+
+    const misionCompleta = config.mission_fields.every(field => {
+      const value = (conv.data as Record<string, any>)[field.key];
+      return value !== null && value !== undefined && value !== '';
+    });
 
     if (misionCompleta) {
       console.log(`[AI-CONV] ✅ MISIÓN COMPLETADA para ${phone}:`);
-      console.log(`   Zona: ${conv.data.zona}`);
-      console.log(`   Operación: ${conv.data.accion}`);
-      console.log(`   Presupuesto: $${conv.data.presupuesto?.toLocaleString('es-AR')}`);
+      for (const field of config.mission_fields) {
+        const value = (conv.data as Record<string, any>)[field.key];
+        console.log(`   ${field.label}: ${value}`);
+      }
 
-      // Agregar a lista de ignorados permanentemente (misión completada)
       await addToIgnored(phone, 'MISION_COMPLETADA', 'Misión completada con éxito');
       console.log(`[AI-CONV] ✓ Contacto ${phone} agregado a ignorados (misión completada)`);
 
-      // Marcar conversación como inactiva inmediatamente
       conv.active = false;
       console.log(`[AI-CONV] Conversación finalizada: ${phone}`);
     }
