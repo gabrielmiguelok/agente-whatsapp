@@ -7,7 +7,7 @@
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { IconButton, Tooltip, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material"
-import { Moon, Sun, ChevronLeft, ChevronRight, Plus, Save, Check, LayoutGrid, Table2, ChevronDown, Columns3 } from "lucide-react"
+import { Moon, Sun, ChevronLeft, ChevronRight, Plus, Save, Check, LayoutGrid, Table2, ChevronDown, Columns3, Trash2 } from "lucide-react"
 
 export type AddRecordState = 'idle' | 'adding' | 'saving' | 'confirmed';
 export type ViewMode = 'table' | 'board';
@@ -38,6 +38,8 @@ export interface FiltersToolbarProps {
   groupByField?: string
   onGroupByFieldChange?: (field: string) => void
   onAddColumn?: (columnName: string) => Promise<boolean>
+  onDeleteColumn?: (columnName: string) => Promise<boolean>
+  deletableColumns?: string[]
 }
 
 export default function FiltersToolbar({
@@ -56,6 +58,8 @@ export default function FiltersToolbar({
   groupByField,
   onGroupByFieldChange,
   onAddColumn,
+  onDeleteColumn,
+  deletableColumns = [],
 }: FiltersToolbarProps) {
   const [viewMenuAnchor, setViewMenuAnchor] = useState<HTMLElement | null>(null);
   const viewMenuOpen = Boolean(viewMenuAnchor);
@@ -63,6 +67,10 @@ export default function FiltersToolbar({
   const [addColumnDialogOpen, setAddColumnDialogOpen] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [addColumnLoading, setAddColumnLoading] = useState(false);
+
+  const [deleteColumnDialogOpen, setDeleteColumnDialogOpen] = useState(false);
+  const [selectedColumnToDelete, setSelectedColumnToDelete] = useState('');
+  const [deleteColumnLoading, setDeleteColumnLoading] = useState(false);
 
   const handleThemeToggle = () => {
     if (onThemeToggle) onThemeToggle()
@@ -104,6 +112,20 @@ export default function FiltersToolbar({
       }
     } finally {
       setAddColumnLoading(false);
+    }
+  };
+
+  const handleDeleteColumnSubmit = async () => {
+    if (!selectedColumnToDelete || !onDeleteColumn) return;
+    setDeleteColumnLoading(true);
+    try {
+      const success = await onDeleteColumn(selectedColumnToDelete);
+      if (success) {
+        setSelectedColumnToDelete('');
+        setDeleteColumnDialogOpen(false);
+      }
+    } finally {
+      setDeleteColumnLoading(false);
     }
   };
 
@@ -191,6 +213,25 @@ export default function FiltersToolbar({
             aria-label="Agregar columna"
           >
             <Columns3 size={18} />
+          </IconButton>
+        </Tooltip>
+      )}
+
+      {/* Eliminar columna */}
+      {onDeleteColumn && deletableColumns.length > 0 && (
+        <Tooltip title="Eliminar columna" arrow>
+          <IconButton
+            size="small"
+            onClick={() => setDeleteColumnDialogOpen(true)}
+            sx={{
+              color: '#ef4444',
+              '&:hover': {
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              },
+            }}
+            aria-label="Eliminar columna"
+          >
+            <Trash2 size={18} />
           </IconButton>
         </Tooltip>
       )}
@@ -290,6 +331,111 @@ export default function FiltersToolbar({
             }}
           >
             {addColumnLoading ? 'Creando...' : 'Crear columna'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog para eliminar columna */}
+      <Dialog
+        open={deleteColumnDialogOpen}
+        onClose={() => !deleteColumnLoading && setDeleteColumnDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          backdrop: {
+            style: { backgroundColor: 'rgba(0,0,0,0.5)' }
+          }
+        }}
+        sx={{
+          zIndex: 99999,
+          '& .MuiDialog-paper': {
+            backgroundColor: isDarkMode ? 'oklch(0.18 0.01 240)' : '#ffffff',
+            borderRadius: '12px',
+          },
+        }}
+      >
+        <DialogTitle sx={{
+          color: isDarkMode ? 'oklch(0.98 0.002 240)' : '#1f2937',
+          fontWeight: 600,
+          fontSize: '16px',
+        }}>
+          Eliminar columna
+        </DialogTitle>
+        <DialogContent>
+          <p style={{
+            fontSize: '13px',
+            color: isDarkMode ? 'oklch(0.7 0.02 240)' : '#6b7280',
+            marginBottom: '12px',
+          }}>
+            Selecciona la columna que deseas eliminar. Esta acción no se puede deshacer.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {deletableColumns.map((col) => (
+              <Button
+                key={col}
+                variant={selectedColumnToDelete === col ? 'contained' : 'outlined'}
+                onClick={() => setSelectedColumnToDelete(col)}
+                disabled={deleteColumnLoading}
+                sx={{
+                  justifyContent: 'flex-start',
+                  textTransform: 'none',
+                  fontSize: '13px',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: selectedColumnToDelete === col
+                    ? '#ef4444'
+                    : 'transparent',
+                  borderColor: selectedColumnToDelete === col
+                    ? '#ef4444'
+                    : isDarkMode ? 'oklch(0.3 0.02 240)' : '#e5e7eb',
+                  color: selectedColumnToDelete === col
+                    ? '#ffffff'
+                    : isDarkMode ? 'oklch(0.9 0.02 240)' : '#374151',
+                  '&:hover': {
+                    backgroundColor: selectedColumnToDelete === col
+                      ? '#dc2626'
+                      : isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                    borderColor: selectedColumnToDelete === col
+                      ? '#dc2626'
+                      : '#ef4444',
+                  },
+                }}
+              >
+                {col.toUpperCase().replace(/_/g, ' ')}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+        <DialogActions sx={{ padding: '12px 24px 16px' }}>
+          <Button
+            onClick={() => {
+              setDeleteColumnDialogOpen(false);
+              setSelectedColumnToDelete('');
+            }}
+            disabled={deleteColumnLoading}
+            sx={{
+              color: isDarkMode ? 'oklch(0.7 0.02 240)' : '#6b7280',
+              textTransform: 'none',
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleDeleteColumnSubmit}
+            disabled={!selectedColumnToDelete || deleteColumnLoading}
+            variant="contained"
+            sx={{
+              backgroundColor: '#ef4444',
+              textTransform: 'none',
+              '&:hover': {
+                backgroundColor: '#dc2626',
+              },
+              '&.Mui-disabled': {
+                backgroundColor: isDarkMode ? 'oklch(0.25 0.02 240)' : '#e5e7eb',
+              },
+            }}
+          >
+            {deleteColumnLoading ? 'Eliminando...' : 'Eliminar columna'}
           </Button>
         </DialogActions>
       </Dialog>
