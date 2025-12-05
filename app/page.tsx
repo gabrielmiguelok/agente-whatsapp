@@ -234,6 +234,34 @@ export default function Home() {
     }
   }, [fetchDynamicColumns, refetch]);
 
+  const handleDeleteColumn = useCallback(async (columnName: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/contacts/columns?name=${encodeURIComponent(columnName)}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        toast.error(result.error || 'Error al eliminar columna');
+        return false;
+      }
+
+      toast.success(`Columna "${columnName.toUpperCase().replace(/_/g, ' ')}" eliminada`);
+      await fetchDynamicColumns();
+      await refetch();
+      return true;
+    } catch (error) {
+      console.error('Error deleting column:', error);
+      toast.error('Error al eliminar columna');
+      return false;
+    }
+  }, [fetchDynamicColumns, refetch]);
+
+  const deletableColumnNames = useMemo(() => {
+    return dynamicColumns.map((col) => col.name);
+  }, [dynamicColumns]);
+
   useEffect(() => {
     setIsHydrated(true);
     verifyAuthAndRole();
@@ -642,6 +670,8 @@ export default function Home() {
                       try { await updateCell(rowId, colId, newValue); } catch {}
                     }}
                     onAddColumn={handleAddColumn}
+                    onDeleteColumn={handleDeleteColumn}
+                    deletableColumns={deletableColumnNames}
                   />
                 )}
               </div>
