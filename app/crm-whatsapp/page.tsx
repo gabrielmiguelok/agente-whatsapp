@@ -17,7 +17,7 @@ import {
 import type { SessionStatus as StatusType } from '@/lib/whatsapp/types';
 import type { PromptConfig } from '@/lib/whatsapp/types/promptConfig';
 
-const SESSION_ID = 'crm-onia';
+const SESSION_ID = 'agentewhatsapp';
 
 interface SessionData {
   email: string;

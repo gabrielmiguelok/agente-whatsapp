@@ -18,7 +18,7 @@ const brandTitleDefault = "Nexus CRM | Automatización Inteligente de WhatsApp c
 const brandTitleTemplate = "%s | Nexus CRM"
 const brandDescription =
   "Nexus CRM: Plataforma de automatización de WhatsApp con inteligencia artificial. Gestiona contactos, mensajes y conversaciones automáticas con IA que califica leads en tiempo real. CRM inmobiliario inteligente."
-const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://crm.onia.agency"
+const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://agentewhatsapp.space"
 
 const ogImage = `${baseUrl}/preview.png`
 const ogIcon = `${baseUrl}/icon-512x512.png`
