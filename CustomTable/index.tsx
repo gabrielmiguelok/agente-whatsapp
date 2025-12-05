@@ -52,6 +52,8 @@ export type CustomTableProps = {
   onAddRecord?: () => void;
   addRecordState?: AddRecordState;
   onAddColumn?: (columnName: string) => Promise<boolean>;
+  onDeleteColumn?: (columnName: string) => Promise<boolean>;
+  deletableColumns?: string[];
 };
 
 export default function CustomTable({
@@ -74,6 +76,8 @@ export default function CustomTable({
   onAddRecord,
   addRecordState = 'idle',
   onAddColumn,
+  onDeleteColumn,
+  deletableColumns = [],
 }: CustomTableProps) {
   /* Repos + servicio */
   const localRepo = new LocalTableDataRepository('myTableData');
@@ -269,6 +273,8 @@ export default function CustomTable({
               groupByField={groupByField}
               onGroupByFieldChange={setGroupByField}
               onAddColumn={onAddColumn}
+              onDeleteColumn={onDeleteColumn}
+              deletableColumns={deletableColumns}
             />
           </div>
         )}
