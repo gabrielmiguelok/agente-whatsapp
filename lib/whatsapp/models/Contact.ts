@@ -281,6 +281,49 @@ export class Contact {
       return false;
     }
   }
+
+  /**
+   * Actualiza un campo dinámico de un contacto (para campos configurables)
+   * @param phoneDigits - Número de teléfono
+   * @param columnName - Nombre de la columna en la DB
+   * @param value - Valor a guardar
+   */
+  static async updateDynamicField(
+    phoneDigits: string,
+    columnName: string,
+    value: string | number | null
+  ): Promise<boolean> {
+    const ALLOWED_COLUMNS = [
+      'zona', 'accion', 'presupuesto', 'name', 'email',
+      'seguimiento', 'action_status', 'sequence_status', 'message_to_send',
+    ];
+
+    try {
+      const [columns] = await pool.execute<RowDataPacket[]>(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contacts'`
+      );
+      const validColumns = (columns as any[]).map(c => c.COLUMN_NAME.toLowerCase());
+
+      const colLower = columnName.toLowerCase();
+      if (!validColumns.includes(colLower)) {
+        console.error(`[Contact] Columna inválida: ${columnName}`);
+        return false;
+      }
+
+      const safeColumn = columnName.replace(/[^a-zA-Z0-9_]/g, '');
+
+      await pool.execute(
+        `UPDATE contacts SET \`${safeColumn}\` = ? WHERE phone = ?`,
+        [value, phoneDigits]
+      );
+      console.log(`[Contact] Campo ${safeColumn} actualizado para ${phoneDigits}: ${value}`);
+      return true;
+    } catch (err: any) {
+      console.error(`[Contact] updateDynamicField error (${columnName}):`, err.message);
+      return false;
+    }
+  }
 }
 
 export default Contact;
