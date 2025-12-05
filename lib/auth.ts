@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs"
 import pool from "./db"
 import type { RowDataPacket } from "mysql2"
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "crm-onia-secret-key-2024")
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "agentewhatsapp-secret-key-2024")
 const COOKIE_NAME = "auth_token"
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 

@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "crm-onia-secret-key-2024")
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "agentewhatsapp-secret-key-2024")
 const COOKIE_NAME = "auth_token"
 
-const PUBLIC_PATHS = ["/login", "/api/auth", "/no-autorizado"]
+const PUBLIC_PATHS = ["/", "/login", "/api/auth", "/no-autorizado"]
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))
