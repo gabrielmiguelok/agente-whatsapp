@@ -209,6 +209,7 @@ class WhatsAppSessionManagerImpl {
     }
 
     session.client.resetReplacedBlock();
+    session.client.resetQrTimeoutBlock();
 
     console.log(`[SessionManager] Iniciando sesion: ${email}`);
     session.state.status = 'connecting';
@@ -262,17 +263,53 @@ class WhatsAppSessionManagerImpl {
   }
 
   /**
-   * Elimina una sesion completamente
+   * Elimina una sesion completamente (memoria + credenciales + DB)
    */
   async deleteSession(email: string): Promise<void> {
     const stack = new Error().stack || '';
     const caller = stack.split('\n').slice(2, 4).join(' <- ');
-    console.log(`[SessionManager] Eliminando sesion: ${email} (caller: ${caller.slice(0, 100)})`);
+    console.log(`[SessionManager] Eliminando sesion completa: ${email} (caller: ${caller.slice(0, 100)})`);
 
-    await this.logoutSession(email);
+    // 1. Si existe en memoria, hacer cleanup completo
+    const session = this.sessions.get(email);
+    if (session) {
+      try {
+        // Detener todos los timers y procesos
+        session.client.cleanup();
+        // Eliminar credenciales de disco
+        session.client.wipeAuth();
+        // Limpiar datastore
+        session.dataStore.cleanup();
+      } catch (e: any) {
+        console.warn(`[SessionManager] Error en cleanup de ${email}:`, e?.message);
+      }
+    }
+
+    // 2. Eliminar de memoria
     this.sessions.delete(email);
-    await WhatsAppSessionModel.delete(email);
-    console.log(`[SessionManager] Sesion eliminada: ${email}`);
+
+    // 3. Eliminar de DB
+    try {
+      await WhatsAppSessionModel.delete(email);
+    } catch (e: any) {
+      console.warn(`[SessionManager] Error eliminando de DB:`, e?.message);
+    }
+
+    // 4. Eliminar carpeta de auth por si quedó algo (fuerza bruta)
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const sanitizedEmail = email.replace(/[^a-z0-9]/gi, '_');
+      const authFolder = path.join(process.cwd(), 'auth-ts', sanitizedEmail);
+      if (fs.existsSync(authFolder)) {
+        fs.rmSync(authFolder, { recursive: true, force: true });
+        console.log(`[SessionManager] Carpeta auth eliminada: ${authFolder}`);
+      }
+    } catch (e: any) {
+      console.warn(`[SessionManager] Error eliminando carpeta auth:`, e?.message);
+    }
+
+    console.log(`[SessionManager] Sesion eliminada completamente: ${email}`);
   }
 
   /**

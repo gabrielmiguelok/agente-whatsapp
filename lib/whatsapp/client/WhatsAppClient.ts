@@ -64,6 +64,11 @@ export class WhatsAppClient {
   private _autoForced: number = 0;
   private _stoppedDueToReplaced: boolean = false;
 
+  private _qrTimeoutCount: number = 0;
+  private _stoppedDueToQrTimeout: boolean = false;
+  private _qrGeneratedAt: number = 0;
+  private _lastQrCode: string | null = null;
+
   private _pollRunning: boolean = false;
   private _pollTimer: NodeJS.Timeout | null = null;
 
@@ -102,6 +107,12 @@ export class WhatsAppClient {
       return;
     }
 
+    if (this._stoppedDueToQrTimeout) {
+      console.warn(`[${this.sessionEmail}] Reconexión bloqueada - QR no escaneado después de ${CONFIG.QR_TIMEOUT_MAX_RETRIES} intentos`);
+      console.warn(`[${this.sessionEmail}] Usa resetQrTimeoutBlock() o reinicia la sesión manualmente`);
+      return;
+    }
+
     if (this.sock && this.initialized) {
       console.log(`[${this.sessionEmail}] Ya inicializado y conectado, ignorando`);
       return;
@@ -127,6 +138,15 @@ export class WhatsAppClient {
     this._stoppedDueToReplaced = false;
     this._replacedTimestamps = [];
     console.log(`[${this.sessionEmail}] Bloqueo REPLACED reseteado`);
+  }
+
+  /**
+   * Resetea el bloqueo por QR timeout (para reconexión manual)
+   */
+  resetQrTimeoutBlock(): void {
+    this._stoppedDueToQrTimeout = false;
+    this._qrTimeoutCount = 0;
+    console.log(`[${this.sessionEmail}] Bloqueo QR timeout reseteado`);
   }
 
   private async _doInitialize(): Promise<void> {
@@ -285,7 +305,16 @@ export class WhatsAppClient {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
+        // Evitar generar múltiples QRs en rápida sucesión
+        const now = Date.now();
+        if (this._lastQrCode === qr || (now - this._qrGeneratedAt < 5000)) {
+          console.log(`[${this.sessionEmail}] QR duplicado ignorado`);
+          return;
+        }
+
         this._sawQR = true;
+        this._qrGeneratedAt = now;
+        this._lastQrCode = qr;
         console.log(`[${this.sessionEmail}] QR Code generado`);
         this.onStatusChange?.('qr_pending');
         this.onQrCode?.(qr);
@@ -306,9 +335,19 @@ export class WhatsAppClient {
         const isQRTimeout = statusCode === 408 && this._sawQR;
 
         if (isQRTimeout) {
-          console.log(`[${this.sessionEmail}] QR expirado, generando nuevo...`);
+          this._qrTimeoutCount++;
+          console.log(`[${this.sessionEmail}] QR expirado (${this._qrTimeoutCount}/${CONFIG.QR_TIMEOUT_MAX_RETRIES})`);
           this._sawQR = false;
-          this._scheduleReconnect('qr-timeout', 1000);
+
+          if (this._qrTimeoutCount >= CONFIG.QR_TIMEOUT_MAX_RETRIES) {
+            console.error(`[${this.sessionEmail}] ⚠️ QR no escaneado después de ${CONFIG.QR_TIMEOUT_MAX_RETRIES} intentos. DETENIENDO reconexión.`);
+            console.error(`[${this.sessionEmail}] ⚠️ Para reintentar, usa resetQrTimeoutBlock() o reinicia la sesión manualmente.`);
+            this.onStatusChange?.('disconnected');
+            this._stoppedDueToQrTimeout = true;
+            return;
+          }
+
+          this._scheduleReconnect('qr-timeout', CONFIG.QR_TIMEOUT_RETRY_DELAY_MS);
           return;
         }
 
@@ -346,6 +385,7 @@ export class WhatsAppClient {
           this._reconnectTimer = null;
         }
         this._closingCount = 0;
+        this._qrTimeoutCount = 0;
 
         // Guardar tel propio
         const selfJid = this.sock?.user?.id || null;
@@ -750,8 +790,16 @@ export class WhatsAppClient {
       clearTimeout(this._retryTimer);
       this._retryTimer = null;
     }
+
+    // Resetear estados de QR y conexión
     this._failedMessages.clear();
     this._messageStore.clear();
+    this._lastQrCode = null;
+    this._qrGeneratedAt = 0;
+    this._sawQR = false;
+    this._qrTimeoutCount = 0;
+    this.initialized = false;
+
     this._destroySocket();
     this.dataStore.cleanup();
   }

@@ -50,6 +50,10 @@ export const CONFIG: WhatsAppConfig = {
   AUTO_FORCE_NEW_ON_PERSISTENT_REPLACED: false,
   AUTO_FORCE_NEW_MAX: 0,
 
+  // QR timeout - límite de reintentos cuando el QR no se escanea
+  QR_TIMEOUT_MAX_RETRIES: 3,
+  QR_TIMEOUT_RETRY_DELAY_MS: 60_000,
+
   // Envios rate-limit
   SEND_RATE_MIN_DELAY_MS: 2000,
 

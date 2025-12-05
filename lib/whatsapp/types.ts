@@ -320,6 +320,10 @@ export interface WhatsAppConfig {
   AUTO_FORCE_NEW_ON_PERSISTENT_REPLACED: boolean;
   AUTO_FORCE_NEW_MAX: number;
 
+  // QR timeout
+  QR_TIMEOUT_MAX_RETRIES: number;
+  QR_TIMEOUT_RETRY_DELAY_MS: number;
+
   // Rate limit
   SEND_RATE_MIN_DELAY_MS: number;
 
