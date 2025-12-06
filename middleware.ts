@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { jwtVerify } from "jose"
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "agentewhatsapp-secret-key-2024")
-const COOKIE_NAME = "auth_token"
+const COOKIE_NAME = "agentewhatsappAuth"
 
 const PUBLIC_PATHS = ["/", "/login", "/api/auth", "/no-autorizado"]
 
@@ -30,22 +28,15 @@ export async function middleware(request: NextRequest) {
 
   const token = request.cookies.get(COOKIE_NAME)?.value
 
-  if (!token) {
+  if (!token || token.trim() === "") {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("next", pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  try {
-    await jwtVerify(token, JWT_SECRET)
-    return NextResponse.next()
-  } catch {
-    const loginUrl = new URL("/login", request.url)
-    loginUrl.searchParams.set("next", pathname)
-    const response = NextResponse.redirect(loginUrl)
-    response.cookies.delete(COOKIE_NAME)
-    return response
-  }
+  // Token existe, permitir acceso
+  // La validación real del token se hace en /api/auth/verify consultando la DB
+  return NextResponse.next()
 }
 
 export const config = {
