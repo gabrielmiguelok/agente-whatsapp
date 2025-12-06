@@ -20,7 +20,7 @@ pnpm lint             # ESLint
 
 ## Production
 
-- **URL:** https://agentewhatsapp.space
+- **URL:** https://delegar.space
 - **PM2:** `pm2 restart agentewhatsapp`
 
 ## Architecture
@@ -154,7 +154,7 @@ DB_NAME=agentewhatsapp_db
 DB_USER=<user>
 DB_PASSWORD=<password>
 
-NEXT_PUBLIC_BASE_URL=https://agentewhatsapp.space
+NEXT_PUBLIC_BASE_URL=https://delegar.space
 OPENAI_API_KEY=<key>
 
 JWT_SECRET=<secret>

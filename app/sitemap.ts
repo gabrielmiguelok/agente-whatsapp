@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next"
 
-const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://agentewhatsapp.space"
+const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://delegar.space"
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = ["/", "/sobre-nosotros"]
