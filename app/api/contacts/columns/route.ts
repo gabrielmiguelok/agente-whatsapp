@@ -138,7 +138,7 @@ export async function DELETE(request: NextRequest) {
     const protectedColumns = [
       'id', 'phone', 'name', 'email', 'action_status', 'sequence_status',
       'message_to_send', 'instance_email', 'created_at', 'updated_at',
-      'seguimiento', 'accion', 'zona', 'presupuesto'
+      'seguimiento'
     ];
 
     if (protectedColumns.includes(columnName)) {
