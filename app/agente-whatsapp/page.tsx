@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 
 const SESSION_ID = 'agentewhatsapp';
-const CONTACTS_DYNAMIC_FIELDS = ['accion', 'zona'];
+const CONTACTS_DYNAMIC_FIELDS: string[] = [];
 
 const BASE_CONTACTS_COLUMNS = {
   phone: { type: 'text', header: 'TELÉFONO', width: 150 },
@@ -33,29 +33,6 @@ const BASE_CONTACTS_COLUMNS = {
       { value: 'SEGUIMIENTO 3', label: 'SEGUIMIENTO 3' },
       { value: 'SEGUIMIENTO 4', label: 'SEGUIMIENTO 4' },
     ],
-  },
-  accion: {
-    type: 'badge',
-    header: 'ACCIÓN',
-    width: 120,
-    allowCreate: true,
-    useDynamicOptions: true,
-    dataset: 'contacts',
-  },
-  zona: {
-    type: 'badge',
-    header: 'ZONA',
-    width: 140,
-    allowCreate: true,
-    useDynamicOptions: true,
-    dataset: 'contacts',
-  },
-  presupuesto: {
-    type: 'currency',
-    header: 'PRESUPUESTO',
-    width: 140,
-    currencySymbol: '$',
-    currencyLocale: 'es-AR',
   },
   created_at: { type: 'date', header: 'CREADO', width: 160 },
 } as const;
