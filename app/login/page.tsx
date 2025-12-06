@@ -48,7 +48,7 @@ function LoginClient() {
         if (response.ok) {
           const data = await response.json()
           if (data.authenticated) {
-            router.push("/crm-whatsapp")
+            router.push("/panel")
             return
           }
         }
@@ -67,7 +67,7 @@ function LoginClient() {
     setError("")
     try {
       const emailHint = emailParam ? `&email=${encodeURIComponent(emailParam)}` : ''
-      window.location.href = `/api/auth/google?redirect=/crm-whatsapp${emailHint}`
+      window.location.href = `/api/auth/google?redirect=/panel${emailHint}`
     } catch (error) {
       setError("Error al conectar con Google")
       setIsLoading(false)

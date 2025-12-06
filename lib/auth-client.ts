@@ -16,8 +16,8 @@ export function clearAllCookies() {
     const eqPos = cookie.indexOf("=")
     const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim()
 
-    const domains = [window.location.hostname, `.${window.location.hostname}`, "localhost", ".agentewhatsapp.space"]
-    const paths = ["/", "/api", "/login", "/crm-whatsapp"]
+    const domains = [window.location.hostname, `.${window.location.hostname}`, "localhost", ".delegar.space"]
+    const paths = ["/", "/api", "/login", "/panel"]
 
     domains.forEach((domain) => {
       paths.forEach((path) => {

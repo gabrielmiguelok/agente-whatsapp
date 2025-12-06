@@ -8,7 +8,7 @@ const COOKIE_NAME = "agentewhatsappAuth"
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30 // 30 days
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || "localhost"
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://agentewhatsapp.space"
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://delegar.space"
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   const email = searchParams.get("email")
   const redirect = searchParams.get("redirect")
 
-  const requestedRedirect = redirect || "/crm-whatsapp"
+  const requestedRedirect = redirect || "/panel"
   const redirectUrl = sanitizeRedirect(requestedRedirect)
 
   if (!code) {
@@ -54,13 +54,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl)
   }
 
-  let parsedState = { redirect: "/crm-whatsapp" }
+  let parsedState = { redirect: "/panel" }
   try {
     if (state) {
       parsedState = JSON.parse(state)
     }
   } catch {
-    parsedState.redirect = state || "/crm-whatsapp"
+    parsedState.redirect = state || "/panel"
   }
   const finalRedirect = sanitizeRedirect(parsedState.redirect)
 
