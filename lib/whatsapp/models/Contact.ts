@@ -73,9 +73,6 @@ export class Contact {
         message_to_send: null,
         seguimiento: 'SEGUIMIENTO 1',
         email: null,
-        accion: null,
-        zona: null,
-        presupuesto: null,
         instance_email: instanceEmail || null,
         created_at: new Date(),
         updated_at: new Date(),
@@ -205,84 +202,6 @@ export class Contact {
   }
 
   /**
-   * Actualiza la zona de un contacto
-   */
-  static async updateZona(phoneDigits: string, zona: string): Promise<boolean> {
-    try {
-      await pool.execute('UPDATE contacts SET zona = ? WHERE phone = ?', [zona, phoneDigits]);
-      console.log(`[Contact] Zona actualizada para ${phoneDigits}: ${zona}`);
-      return true;
-    } catch (err: any) {
-      console.error('[Contact] updateZona error:', err.message);
-      return false;
-    }
-  }
-
-  /**
-   * Actualiza la accion de un contacto (COMPRA/ALQUILER)
-   */
-  static async updateAccion(phoneDigits: string, accion: string): Promise<boolean> {
-    try {
-      await pool.execute('UPDATE contacts SET accion = ? WHERE phone = ?', [accion, phoneDigits]);
-      console.log(`[Contact] Accion actualizada para ${phoneDigits}: ${accion}`);
-      return true;
-    } catch (err: any) {
-      console.error('[Contact] updateAccion error:', err.message);
-      return false;
-    }
-  }
-
-  /**
-   * Actualiza el presupuesto de un contacto
-   */
-  static async updatePresupuesto(phoneDigits: string, presupuesto: number): Promise<boolean> {
-    try {
-      await pool.execute('UPDATE contacts SET presupuesto = ? WHERE phone = ?', [presupuesto, phoneDigits]);
-      console.log(`[Contact] Presupuesto actualizado para ${phoneDigits}: ${presupuesto}`);
-      return true;
-    } catch (err: any) {
-      console.error('[Contact] updatePresupuesto error:', err.message);
-      return false;
-    }
-  }
-
-  /**
-   * Actualiza multiples campos de un contacto de una vez
-   */
-  static async updateFields(
-    phoneDigits: string,
-    fields: Partial<{ zona: string; accion: string; presupuesto: number }>
-  ): Promise<boolean> {
-    const updates: string[] = [];
-    const values: (string | number)[] = [];
-
-    if (fields.zona !== undefined) {
-      updates.push('zona = ?');
-      values.push(fields.zona);
-    }
-    if (fields.accion !== undefined) {
-      updates.push('accion = ?');
-      values.push(fields.accion);
-    }
-    if (fields.presupuesto !== undefined) {
-      updates.push('presupuesto = ?');
-      values.push(fields.presupuesto);
-    }
-
-    if (updates.length === 0) return true;
-
-    try {
-      values.push(phoneDigits);
-      await pool.execute(`UPDATE contacts SET ${updates.join(', ')} WHERE phone = ?`, values);
-      console.log(`[Contact] Campos actualizados para ${phoneDigits}:`, fields);
-      return true;
-    } catch (err: any) {
-      console.error('[Contact] updateFields error:', err.message);
-      return false;
-    }
-  }
-
-  /**
    * Actualiza un campo dinámico de un contacto (para campos configurables)
    * @param phoneDigits - Número de teléfono
    * @param columnName - Nombre de la columna en la DB
@@ -294,8 +213,7 @@ export class Contact {
     value: string | number | null
   ): Promise<boolean> {
     const ALLOWED_COLUMNS = [
-      'zona', 'accion', 'presupuesto', 'name', 'email',
-      'seguimiento', 'action_status', 'sequence_status', 'message_to_send',
+      'name', 'email', 'seguimiento', 'action_status', 'sequence_status', 'message_to_send',
     ];
 
     try {

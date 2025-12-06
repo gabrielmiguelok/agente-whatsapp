@@ -39,9 +39,6 @@ export interface Contact {
   message_to_send: string | null;
   seguimiento: string | null;
   email: string | null;
-  accion: 'COMPRA' | 'ALQUILER' | null;
-  zona: string | null;
-  presupuesto: number | null;
   instance_email: string | null;
   created_at: Date;
   updated_at: Date;
@@ -149,9 +146,7 @@ export interface TriggerMatch {
 // ==================== AI Conversation ====================
 
 export interface ConversationData {
-  zona: string | null;
-  accion: 'COMPRA' | 'ALQUILER' | null;
-  presupuesto: number | null;
+  [key: string]: string | number | null;
 }
 
 export interface ConversationState {
@@ -164,9 +159,7 @@ export interface ConversationState {
 }
 
 export interface AIAnalysisResult {
-  zona: string | null;
-  accion: 'COMPRA' | 'ALQUILER' | null;
-  presupuesto: number | null;
+  [key: string]: string | number | null;
 }
 
 export interface AIConversationOptions {

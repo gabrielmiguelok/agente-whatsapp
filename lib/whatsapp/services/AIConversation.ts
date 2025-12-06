@@ -339,17 +339,13 @@ ${questionExamplesText}
 ORDEN DE PREGUNTAS - PRIORIDAD INTELIGENTE:
 Analizá los datos que te faltan y decidí cuál preguntar PRIMERO según esta lógica:
 
-1. **DATOS DE IDENTIDAD PRIMERO**: Si falta nombre, email o cualquier dato que identifique a la persona → SIEMPRE preguntá esto PRIMERO. Presentate y pedí el dato. Es descortés hablar sin saber con quién hablás.
+1. **DATOS DE IDENTIDAD PRIMERO**: Si falta nombre, email o cualquier dato que identifique a la persona → SIEMPRE preguntá esto PRIMERO. Presentate y pedí el dato.
 
 2. **DATOS PERSONALES SEGUNDO**: Datos sobre la persona (familia, situación, preferencias personales).
 
-3. **DATOS DE NEGOCIO AL FINAL**: Zona, presupuesto, tipo de operación, características técnicas.
+3. **DATOS DE NEGOCIO AL FINAL**: Información específica del servicio, características técnicas.
 
-REGLA DE ORO: Aunque el cliente mencione algo técnico ("quiero comprar una casa"), vos PRIMERO te presentás y preguntás cómo se llama. Podés reconocer brevemente lo que dijo, pero NO avances a preguntar datos técnicos sin antes saber el nombre.
-
-Ejemplo correcto:
-- Cliente: "Hola, quiero comprar una casa"
-- Vos: "¡Hola! Qué bueno que estés buscando 😊 Soy Ana, asistente de [inmobiliaria]. ¿Con quién tengo el gusto de hablar?"
+REGLA DE ORO: Aunque el cliente mencione algo técnico, vos PRIMERO te presentás y preguntás cómo se llama. Podés reconocer brevemente lo que dijo, pero NO avances a preguntar datos técnicos sin antes saber el nombre.
 `}
 
 REGLAS INQUEBRANTABLES (SEGUÍ TODAS AL PIE DE LA LETRA):
@@ -437,16 +433,9 @@ REGLAS DE EXTRACCIÓN:
 
 ${extractionInstructions.join('\n\n')}
 
-IMPORTANTE PARA PRESUPUESTO:
-- Si menciona "pesos", "ARS" → convertir a USD (1200 ARS = 1 USD)
-- "lucas", "k" sin moneda en Argentina → asumir pesos y convertir
-- "dólares", "USD" → dejar el número tal cual
-- Resultado SIEMPRE en dólares (número entero)
-
 IMPORTANTE PARA RESPUESTAS CORTAS:
 - "Sí", "No", "Claro", "Dale", etc. → INTERPRETAR según el contexto de la última pregunta
-- Si se preguntó por hijos y responde "sí" → significa que SÍ tiene hijos
-- Si se preguntó por zona y responde "centro" → es la zona
+- Si se preguntó algo específico y la respuesta es corta → interpretar en contexto
 
 RESPUESTA: JSON exacto, sin explicaciones ni markdown:
 {${jsonFormat}}`;
@@ -550,16 +539,7 @@ RESPUESTA: JSON exacto, sin explicaciones ni markdown:
    * Genera respuesta de fallback si GPT falla
    */
   private _getFallbackResponse(conv: ConversationState): string {
-    if (!conv.data.zona) {
-      return `¡Hola! 😊 Contame, ¿por qué zona estás buscando?`;
-    }
-    if (!conv.data.accion) {
-      return `Perfecto, ${conv.data.zona} es muy linda zona. ¿Buscás para comprar o alquilar?`;
-    }
-    if (!conv.data.presupuesto) {
-      return `Excelente. ¿Qué presupuesto más o menos manejás para ${conv.data.accion === 'COMPRA' ? 'la compra' : 'el alquiler'}?`;
-    }
-    return `¡Gracias por la info! Un asesor se va a comunicar con vos a la brevedad 😊`;
+    return `¡Gracias por escribirnos! Un asesor se va a comunicar con vos a la brevedad 😊`;
   }
 
   /**
