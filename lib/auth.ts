@@ -4,7 +4,9 @@ import bcrypt from "bcryptjs"
 import pool from "./db"
 import type { RowDataPacket } from "mysql2"
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "agentewhatsapp-secret-key-2024")
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || "agentewhatsapp-jwt-secret-2024-secure"
+)
 const COOKIE_NAME = "agentewhatsappAuth"
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
