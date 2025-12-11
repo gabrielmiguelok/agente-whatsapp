@@ -62,7 +62,7 @@ export default function FooterSection() {
                 <span className="text-blue-400">→</span> Tailwind CSS
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-blue-400">→</span> SheetJS (xlsx) para exportar
+                <span className="text-blue-400">→</span> ExcelJS para exportar
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-blue-400">→</span> Sistema de colores hash-based
