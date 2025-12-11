@@ -21,7 +21,6 @@ const nextConfig = {
 
   outputFileTracingRoot: __dirname,
 
-  // Evitar que Next.js bundlee estos módulos (necesario para Baileys/WebSocket)
   serverExternalPackages: [
     '@whiskeysockets/baileys',
     'ws',
@@ -30,21 +29,10 @@ const nextConfig = {
     'sharp',
     'qrcode-terminal',
     'pino',
+    'exceljs',
   ],
 
-  webpack: (config, { dev, isServer }) => {
-    // Workaround: evitar WasmHash que puede lanzar errores
-    config.output.hashFunction = "xxhash64"
-
-    if (dev && !isServer) {
-      config.watchOptions = {
-        ignored: ["**/node_modules", "./node_modules/**", "./.next/**"],
-        poll: 1000,
-        aggregateTimeout: 300,
-      }
-    }
-    return config
-  },
+  turbopack: {},
 
   images: {
     unoptimized: true,
@@ -72,7 +60,6 @@ const nextConfig = {
     ]
   },
 
-  eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
 
   async rewrites() {
