@@ -7,20 +7,24 @@ import type { RowDataPacket } from "mysql2"
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "agentewhatsapp-jwt-secret-2024-secure"
 )
-const COOKIE_NAME = "agentewhatsappAuth"
+const COOKIE_NAME = "auth_token"
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 export interface User {
   id: number
   email: string
-  password_hash: string
+  password_hash: string | null
   first_name: string | null
   last_name: string | null
   full_name: string | null
   role: "user" | "admin"
   picture: string | null
+  google_id: string | null
+  locale: string | null
+  estado: string | null
   created_at: Date
   updated_at: Date
+  last_login: Date | null
 }
 
 export interface SessionUser {
@@ -40,7 +44,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
 
 export async function createUser(data: {
   email: string
-  passwordHash: string
+  passwordHash?: string
   firstName?: string
   lastName?: string
   fullName?: string
@@ -48,22 +52,25 @@ export async function createUser(data: {
   role?: "user" | "admin"
   picture?: string | null
   googleId?: string | null
+  locale?: string | null
 }): Promise<number> {
   const firstName = data.firstName || ""
   const lastName = data.lastName || ""
   const fullName = data.fullName || data.name || `${firstName} ${lastName}`.trim()
 
   const [result] = await pool.execute(
-    `INSERT INTO users (email, password_hash, first_name, last_name, full_name, role, picture)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (email, password_hash, first_name, last_name, full_name, role, picture, google_id, locale, estado)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmado')`,
     [
       data.email.toLowerCase(),
-      data.passwordHash,
+      data.passwordHash || null,
       firstName,
       lastName,
       fullName,
       data.role || "user",
       data.picture || null,
+      data.googleId || null,
+      data.locale || null,
     ]
   )
   return (result as any).insertId
@@ -71,7 +78,7 @@ export async function createUser(data: {
 
 export async function authenticate(email: string, password: string): Promise<User | null> {
   const user = await findUserByEmail(email)
-  if (!user) return null
+  if (!user || !user.password_hash) return null
 
   const valid = await bcrypt.compare(password, user.password_hash)
   if (!valid) return null

@@ -34,14 +34,12 @@ export interface Contact {
   id: number;
   phone: string;
   name: string | null;
-  action_status: 'ENVIAR' | 'OK' | 'PENDIENTE';
-  sequence_status: 'INICIAR' | 'INICIADA' | 'NO INICIADA';
-  message_to_send: string | null;
   seguimiento: string | null;
   email: string | null;
   instance_email: string | null;
   created_at: Date;
   updated_at: Date;
+  [key: string]: unknown;
 }
 
 // ==================== Mensaje ====================
@@ -197,10 +195,6 @@ export interface IDataStore {
   initialize(): Promise<void>;
   setSelfPhoneDigits(digits: string | null): void;
   logMessage(data: { phoneDigits: string; text: string; direction: 'ENVIADO' | 'RECIBIDO'; waId?: string | null }): Promise<void>;
-  fetchContactsToSend(limit?: number): Promise<Contact[]>;
-  setContactActionStatus(contactId: number, status: string): Promise<boolean>;
-  fetchContactsToStartSequence(limit?: number): Promise<Contact[]>;
-  setContactSequenceStatus(contactId: number, status: string): Promise<boolean>;
   findContactByPhone(phoneDigits: string): Promise<Contact | null>;
   cleanup(): void;
   dedup: IDedup;

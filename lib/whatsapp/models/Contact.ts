@@ -15,7 +15,6 @@ export class Contact {
     if (!phoneDigits || phoneDigits.length < 8) return null;
 
     try {
-      // Buscar exacto primero
       let [results] = await pool.execute<RowDataPacket[]>(
         'SELECT * FROM contacts WHERE phone = ? LIMIT 1',
         [phoneDigits]
@@ -23,7 +22,6 @@ export class Contact {
 
       if (results.length > 0) return results[0] as ContactType;
 
-      // Buscar por contenido (ultimos digitos)
       [results] = await pool.execute<RowDataPacket[]>(
         'SELECT * FROM contacts WHERE phone LIKE ? ORDER BY LENGTH(phone) DESC LIMIT 1',
         [`%${phoneDigits.slice(-8)}`]
@@ -49,28 +47,23 @@ export class Contact {
     }
 
     try {
-      // Intentar encontrar existente
       let contact = await this.findByPhone(phoneDigits);
       if (contact) {
         console.log(`[Contact] Contacto EXISTE: ${phoneDigits} (id: ${contact.id})`);
         return { contact, created: false };
       }
 
-      // Crear nuevo
       console.log(`[Contact] Creando nuevo contacto: ${phoneDigits}`);
       const [result] = await pool.execute<ResultSetHeader>(
-        `INSERT INTO contacts (phone, name, action_status, sequence_status, instance_email, seguimiento)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [phoneDigits, '', 'PENDIENTE', 'NO INICIADA', instanceEmail || null, 'SEGUIMIENTO 1']
+        `INSERT INTO contacts (phone, name, instance_email, seguimiento)
+         VALUES (?, ?, ?, ?)`,
+        [phoneDigits, '', instanceEmail || null, 'SEGUIMIENTO 1']
       );
 
       contact = {
         id: result.insertId,
         phone: phoneDigits,
         name: '',
-        action_status: 'PENDIENTE',
-        sequence_status: 'NO INICIADA',
-        message_to_send: null,
         seguimiento: 'SEGUIMIENTO 1',
         email: null,
         instance_email: instanceEmail || null,
@@ -81,7 +74,6 @@ export class Contact {
       console.log(`[Contact] Contacto CREADO: ${phoneDigits} (id: ${contact.id})`);
       return { contact, created: true };
     } catch (err: any) {
-      // Si es error de duplicado, intentar obtener el existente
       if (err.code === 'ER_DUP_ENTRY') {
         const contact = await this.findByPhone(phoneDigits);
         return { contact, created: false };
@@ -122,66 +114,6 @@ export class Contact {
   }
 
   /**
-   * Obtiene contactos con accion ENVIAR
-   */
-  static async getContactsToSend(limit = 50): Promise<ContactType[]> {
-    try {
-      const [results] = await pool.execute<RowDataPacket[]>(
-        `SELECT * FROM contacts
-         WHERE action_status = ? AND message_to_send IS NOT NULL AND message_to_send != ?
-         LIMIT ?`,
-        ['ENVIAR', '', limit]
-      );
-      return results as ContactType[];
-    } catch (err: any) {
-      console.error('[Contact] getContactsToSend error:', err.message);
-      return [];
-    }
-  }
-
-  /**
-   * Actualiza el estado de accion de un contacto
-   */
-  static async setActionStatus(contactId: number, status: string): Promise<boolean> {
-    try {
-      await pool.execute('UPDATE contacts SET action_status = ? WHERE id = ?', [status, contactId]);
-      return true;
-    } catch (err: any) {
-      console.error('[Contact] setActionStatus error:', err.message);
-      return false;
-    }
-  }
-
-  /**
-   * Obtiene contactos con secuencia INICIAR
-   */
-  static async getContactsToStartSequence(limit = 50): Promise<ContactType[]> {
-    try {
-      const [results] = await pool.execute<RowDataPacket[]>(
-        'SELECT * FROM contacts WHERE sequence_status = ? LIMIT ?',
-        ['INICIAR', limit]
-      );
-      return results as ContactType[];
-    } catch (err: any) {
-      console.error('[Contact] getContactsToStartSequence error:', err.message);
-      return [];
-    }
-  }
-
-  /**
-   * Actualiza el estado de secuencia de un contacto
-   */
-  static async setSequenceStatus(contactId: number, status: string): Promise<boolean> {
-    try {
-      await pool.execute('UPDATE contacts SET sequence_status = ? WHERE id = ?', [status, contactId]);
-      return true;
-    } catch (err: any) {
-      console.error('[Contact] setSequenceStatus error:', err.message);
-      return false;
-    }
-  }
-
-  /**
    * Verifica si un contacto tiene mas de 1 dia de creacion
    */
   static isOlderThanOneDay(contact: ContactType | null): boolean {
@@ -202,20 +134,13 @@ export class Contact {
   }
 
   /**
-   * Actualiza un campo dinámico de un contacto (para campos configurables)
-   * @param phoneDigits - Número de teléfono
-   * @param columnName - Nombre de la columna en la DB
-   * @param value - Valor a guardar
+   * Actualiza un campo dinámico de un contacto
    */
   static async updateDynamicField(
     phoneDigits: string,
     columnName: string,
     value: string | number | null
   ): Promise<boolean> {
-    const ALLOWED_COLUMNS = [
-      'name', 'email', 'seguimiento', 'action_status', 'sequence_status', 'message_to_send',
-    ];
-
     try {
       const [columns] = await pool.execute<RowDataPacket[]>(
         `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS

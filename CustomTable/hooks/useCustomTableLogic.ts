@@ -140,13 +140,26 @@ export function useCustomTableLogic<T extends Record<string, any>>({
   // 7) Orden de columnas (para drag & drop)
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
 
-  // Inicializar orden de columnas al cargar
+  // Inicializar orden de columnas al cargar - usar accessorKey como fallback
   useEffect(() => {
-    if (columnOrder.length === 0 && indexedColumns.length > 0) {
-      const order = indexedColumns.map((col: any) => col.id || col.accessorKey).filter(Boolean);
-      setColumnOrder(order);
+    if (indexedColumns.length > 0) {
+      const order = indexedColumns.map((col: any) => {
+        // Para la columna de índice, usar su ID especial
+        if (col.id === '_selectIndex') return '_selectIndex';
+        // Para columnas con accessor, extraer el accessorKey
+        if (col.accessorKey) return col.accessorKey;
+        // Fallback al id si existe
+        return col.id;
+      }).filter(Boolean);
+
+      // Solo actualizar si el orden cambió (evitar loops infinitos)
+      const currentOrderStr = columnOrder.join(',');
+      const newOrderStr = order.join(',');
+      if (currentOrderStr !== newOrderStr && (columnOrder.length === 0 || columnOrder.length !== order.length)) {
+        setColumnOrder(order);
+      }
     }
-  }, [indexedColumns, columnOrder.length]);
+  }, [indexedColumns]);
 
   // 8) Instancia react-table (ID REAL por fila)
   const table = useReactTable<T>({

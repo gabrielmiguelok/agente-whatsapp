@@ -25,7 +25,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { phone, name, action_status, sequence_status, message_to_send } = body;
+    const { phone, name } = body;
 
     if (!phone || phone.trim() === '') {
       return NextResponse.json(
@@ -35,15 +35,12 @@ export async function POST(request: NextRequest) {
     }
 
     const [result] = await pool.execute<ResultSetHeader>(
-      `INSERT INTO contacts (phone, name, action_status, sequence_status, message_to_send, seguimiento)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO contacts (phone, name, seguimiento)
+       VALUES (?, ?, ?)`,
       [
         phone,
         name || null,
-        action_status || 'PENDIENTE',
-        sequence_status || 'NO INICIADA',
-        message_to_send || null,
-        'SEGUIMIENTO 1'
+        'NUEVO'
       ]
     );
 

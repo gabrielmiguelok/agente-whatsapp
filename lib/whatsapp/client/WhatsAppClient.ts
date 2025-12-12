@@ -69,12 +69,6 @@ export class WhatsAppClient {
   private _qrGeneratedAt: number = 0;
   private _lastQrCode: string | null = null;
 
-  private _pollRunning: boolean = false;
-  private _pollTimer: NodeJS.Timeout | null = null;
-
-  private _manualSeqPollRunning: boolean = false;
-  private _manualSeqPollTimer: NodeJS.Timeout | null = null;
-  private _processingManualSequences: Set<number> = new Set();
 
   private _initMutex: Promise<void> | null = null;
   private _failedMessages: Map<string, FailedMessage> = new Map();
@@ -398,13 +392,6 @@ export class WhatsAppClient {
         this.onStatusChange?.('connected');
         this.onConnected?.(selfPhoneDigits);
 
-        // Iniciar polling
-        this._startAgendaPolling();
-        if (CONFIG.SEQUENCES_ENABLED) {
-          this._startManualSequencePolling();
-        } else {
-          console.log(`[${this.sessionEmail}] Secuencias deshabilitadas - polling manual no iniciado`);
-        }
       }
     });
 
@@ -557,141 +544,6 @@ export class WhatsAppClient {
         }
       }
     });
-  }
-
-  /**
-   * Inicia el polling de agenda
-   */
-  private _startAgendaPolling(): void {
-    if (this._pollTimer) clearInterval(this._pollTimer);
-    this._processAgendaSends().catch(() => {});
-    this._pollTimer = setInterval(
-      () => this._processAgendaSends().catch(() => {}),
-      CONFIG.POLL_INTERVAL_MS
-    );
-    this._pollTimer.unref?.();
-  }
-
-  /**
-   * Procesa envios de agenda
-   */
-  private async _processAgendaSends(): Promise<void> {
-    if (this._pollRunning) return;
-    this._pollRunning = true;
-
-    try {
-      const items = await this.dataStore.fetchContactsToSend(50);
-      if (!items?.length) return;
-
-      for (const contact of items) {
-        try {
-          const phoneDigits = contact.phone;
-          if (!phoneDigits) continue;
-
-          const text = contact.message_to_send;
-          if (!text?.trim()) continue;
-
-          const jid = `${phoneDigits}@s.whatsapp.net`;
-          const sent = await this.sock?.sendMessage(jid, { text: text.slice(0, 2000) });
-          const waId = sent?.key?.id;
-
-          await this.dataStore.logMessage({ phoneDigits, text, direction: 'ENVIADO', waId });
-          const ok = await this.dataStore.setContactActionStatus(contact.id, 'OK');
-
-          if (ok) console.log(`[SEND] OK -> ${phoneDigits}`);
-          else console.warn(`[SEND] Enviado pero no se pudo marcar OK: ${phoneDigits}`);
-        } catch (e: any) {
-          console.error('[SEND] Error:', e?.message || e);
-        }
-      }
-    } finally {
-      this._pollRunning = false;
-    }
-  }
-
-  /**
-   * Inicia el polling de secuencias manuales
-   */
-  private _startManualSequencePolling(): void {
-    if (this._manualSeqPollTimer) clearInterval(this._manualSeqPollTimer);
-    this._processManualSequences().catch(() => {});
-    this._manualSeqPollTimer = setInterval(
-      () => this._processManualSequences().catch(() => {}),
-      CONFIG.MANUAL_SEQUENCE_POLL_INTERVAL_MS
-    );
-    this._manualSeqPollTimer.unref?.();
-    console.log(
-      `[SEQ-MANUAL] Polling iniciado (cada ${CONFIG.MANUAL_SEQUENCE_POLL_INTERVAL_MS / 1000}s)`
-    );
-  }
-
-  /**
-   * Procesa secuencias manuales
-   */
-  private async _processManualSequences(): Promise<void> {
-    if (this._manualSeqPollRunning) return;
-    this._manualSeqPollRunning = true;
-
-    try {
-      const items = await this.dataStore.fetchContactsToStartSequence(50);
-      if (!items || items.length === 0) return;
-
-      console.log(`[SEQ-MANUAL] Encontrados ${items.length} contacto(s) con SECUENCIA=INICIAR`);
-
-      for (const contact of items) {
-        const contactId = contact.id;
-
-        if (this._processingManualSequences.has(contactId)) continue;
-        this._processingManualSequences.add(contactId);
-
-        try {
-          const phoneDigits = contact.phone;
-          if (!phoneDigits || phoneDigits.length < 8) {
-            console.warn(`[SEQ-MANUAL] Telefono invalido: ${contact.phone}`);
-            await this.dataStore.setContactSequenceStatus(contactId, 'NO INICIADA');
-            this._processingManualSequences.delete(contactId);
-            continue;
-          }
-
-          console.log(`[SEQ-MANUAL] Procesando: ${phoneDigits}`);
-
-          // Actualizar estado
-          await this.dataStore.setContactSequenceStatus(contactId, 'INICIADA');
-
-          // Obtener primer trigger
-          const firstTrigger = this.engine.triggers.keys().next().value;
-          if (!firstTrigger) {
-            console.error(`[SEQ-MANUAL] No hay triggers configurados`);
-            await this.dataStore.setContactSequenceStatus(contactId, 'NO INICIADA');
-            this._processingManualSequences.delete(contactId);
-            continue;
-          }
-
-          // Callback de finalizacion
-          const onComplete = async (phone: string) => {
-            console.log(`[SEQ-MANUAL] Secuencia completada para ${phone}`);
-            await this.dataStore.setContactSequenceStatus(contactId, 'NO INICIADA');
-            this._processingManualSequences.delete(contactId);
-          };
-
-          // Iniciar secuencia
-          const started = await this.engine.startManualSequence(phoneDigits, firstTrigger, onComplete);
-          if (!started) {
-            console.error(`[SEQ-MANUAL] No se pudo iniciar para ${phoneDigits}`);
-            await this.dataStore.setContactSequenceStatus(contactId, 'NO INICIADA');
-            this._processingManualSequences.delete(contactId);
-          }
-        } catch (e: any) {
-          console.error(`[SEQ-MANUAL] Error:`, e?.message || e);
-          await this.dataStore.setContactSequenceStatus(contactId, 'NO INICIADA').catch(() => {});
-          this._processingManualSequences.delete(contactId);
-        }
-      }
-    } catch (e: any) {
-      console.error('[SEQ-MANUAL] Error general:', e?.message || e);
-    } finally {
-      this._manualSeqPollRunning = false;
-    }
   }
 
   /**

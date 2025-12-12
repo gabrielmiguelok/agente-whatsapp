@@ -56,16 +56,7 @@ export default function TableHeader({
                   key={header.id}
                   className="custom-th"
                   data-header-index={hIndex}
-                  draggable={!isIndexCol && !!onDragStart}
-                  onDragStart={(e) => {
-                    if (isIndexCol || !onDragStart) {
-                      e.preventDefault();
-                      return;
-                    }
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', colId);
-                    onDragStart(colId);
-                  }}
+                  draggable={false}
                   onDragOver={(e) => {
                     if (isIndexCol) return;
                     e.preventDefault();
@@ -101,16 +92,25 @@ export default function TableHeader({
                     {!isIndexCol && onDragStart && (
                       <span
                         className="drag-handle"
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', colId);
+                          onDragStart(colId);
+                        }}
                         onMouseDown={(e) => e.stopPropagation()}
                         style={{
                           cursor: 'grab',
-                          opacity: 0.4,
+                          opacity: 0.5,
                           display: 'flex',
                           alignItems: 'center',
                           marginRight: '4px',
+                          padding: '2px',
+                          borderRadius: '2px',
                         }}
                       >
-                        <GripVertical size={12} />
+                        <GripVertical size={14} />
                       </span>
                     )}
                     <span
@@ -195,6 +195,10 @@ export default function TableHeader({
         }
         .drag-handle:hover {
           opacity: 1 !important;
+          background: rgba(18, 124, 243, 0.15);
+        }
+        .drag-handle:active {
+          cursor: grabbing;
         }
         .resize-handle {
           position: absolute;

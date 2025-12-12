@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
 
-const COOKIE_NAME = "agentewhatsappAuth"
+const COOKIE_NAME = "auth_token"
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "agentewhatsapp-jwt-secret-2024-secure"
 )
@@ -23,7 +23,7 @@ function isStaticAsset(pathname: string): boolean {
   )
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   if (isStaticAsset(pathname) || isPublicPath(pathname)) {

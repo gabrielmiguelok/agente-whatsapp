@@ -32,8 +32,6 @@ const nextConfig = {
     'exceljs',
   ],
 
-  turbopack: {},
-
   images: {
     unoptimized: true,
     remotePatterns: [

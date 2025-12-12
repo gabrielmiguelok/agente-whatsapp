@@ -14,8 +14,8 @@ export async function GET() {
     );
 
     const excludedColumns = [
-      'id', 'phone', 'name', 'email', 'action_status', 'sequence_status',
-      'message_to_send', 'instance_email', 'created_at', 'updated_at'
+      'id', 'phone', 'name', 'instance_email', 'created_at', 'updated_at',
+      'seguimiento', 'localidad'
     ];
 
     const customColumns = columns.filter(
@@ -136,9 +136,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     const protectedColumns = [
-      'id', 'phone', 'name', 'email', 'action_status', 'sequence_status',
-      'message_to_send', 'instance_email', 'created_at', 'updated_at',
-      'seguimiento'
+      'id', 'phone', 'name', 'instance_email', 'created_at', 'updated_at',
+      'seguimiento', 'localidad'
     ];
 
     if (protectedColumns.includes(columnName)) {

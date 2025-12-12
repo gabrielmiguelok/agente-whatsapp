@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 
 const SESSION_ID = 'agentewhatsapp';
-const CONTACTS_DYNAMIC_FIELDS: string[] = [];
+const CONTACTS_DYNAMIC_FIELDS = ['accion', 'zona', 'presupuesto'];
 
 const BASE_CONTACTS_COLUMNS = {
   phone: { type: 'text', header: 'TELÉFONO', width: 150 },
@@ -152,12 +152,26 @@ export default function PanelPage() {
   const contactsColumns = useMemo(() => {
     const dynamicDefs: Record<string, any> = {};
     dynamicColumns.forEach((col) => {
-      dynamicDefs[col.name] = {
-        type: 'badge',
-        header: col.name.toUpperCase().replace(/_/g, ' '),
-        width: 140,
-        allowCreate: true,
-      };
+      const isNumeric = ['decimal', 'int', 'bigint', 'float', 'double'].includes(col.type?.toLowerCase() || '');
+
+      if (isNumeric) {
+        dynamicDefs[col.name] = {
+          type: 'currency',
+          header: col.name.toUpperCase().replace(/_/g, ' '),
+          width: 140,
+          currencySymbol: '$',
+          currencyLocale: 'es-AR',
+        };
+      } else {
+        dynamicDefs[col.name] = {
+          type: 'badge',
+          header: col.name.toUpperCase().replace(/_/g, ' '),
+          width: 140,
+          allowCreate: true,
+          useDynamicOptions: true,
+          dataset: 'contacts',
+        };
+      }
     });
 
     return buildColumnsFromDefinition({

@@ -1,22 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { google } from "googleapis"
-import crypto from "crypto"
+import { findUserByEmail, createUser, createSession } from "@/lib/auth"
 import pool from "@/lib/db"
-
-const TOKEN_BYTES = Number(process.env.AUTH_JWD_BYTES) || 64
-const COOKIE_NAME = "agentewhatsappAuth"
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30 // 30 days
-const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || "localhost"
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "https://delegar.space"
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  `${BASE_URL}/api/auth/google`,
+  `${BASE_URL}/api/auth/google`
 )
-
-const genJwd = () => crypto.randomBytes(TOKEN_BYTES).toString("hex")
 
 function sanitizeRedirect(url = "/") {
   try {
@@ -38,7 +31,7 @@ export async function GET(request: NextRequest) {
   const email = searchParams.get("email")
   const redirect = searchParams.get("redirect")
 
-  const requestedRedirect = redirect || "/panel"
+  const requestedRedirect = redirect || "/agente-whatsapp"
   const redirectUrl = sanitizeRedirect(requestedRedirect)
 
   if (!code) {
@@ -54,13 +47,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl)
   }
 
-  let parsedState = { redirect: "/panel" }
+  let parsedState = { redirect: "/agente-whatsapp" }
   try {
     if (state) {
       parsedState = JSON.parse(state)
     }
   } catch {
-    parsedState.redirect = state || "/panel"
+    parsedState.redirect = state || "/agente-whatsapp"
   }
   const finalRedirect = sanitizeRedirect(parsedState.redirect)
 
@@ -86,65 +79,56 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${BASE_URL}/?error=no_email`)
     }
 
-    const newJwd = genJwd()
-
-    let userId: number
+    let user = await findUserByEmail(userEmail)
     let isNew = false
 
-    try {
-      const [existingUsers]: any = await pool.query(
-        `SELECT id, google_id FROM users WHERE email = ? LIMIT 1`,
-        [userEmail.toLowerCase()]
+    if (user) {
+      await pool.execute(
+        `UPDATE users SET
+          google_id = ?,
+          first_name = ?,
+          last_name = ?,
+          full_name = ?,
+          picture = ?,
+          locale = ?,
+          last_login = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+        [googleId, firstName, lastName, fullName, picture, locale, user.id]
       )
+      console.log(`[google-auth] Usuario existente actualizado: ${userEmail} (ID: ${user.id})`)
 
-      if (existingUsers.length > 0) {
-        userId = existingUsers[0].id
-        await pool.query(
-          `UPDATE users SET
-            jwd = ?,
-            google_id = ?,
-            first_name = ?,
-            last_name = ?,
-            full_name = ?,
-            picture = ?,
-            locale = ?,
-            last_login = CURRENT_TIMESTAMP
-          WHERE id = ?`,
-          [newJwd, googleId, firstName, lastName, fullName, picture, locale, userId]
-        )
-        console.log(`[google-auth] Usuario existente actualizado: ${userEmail} (ID: ${userId})`)
-      } else {
-        const [result]: any = await pool.query(
-          `INSERT INTO users
-            (email, google_id, first_name, last_name, full_name, picture, locale, jwd, role, estado)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'user', 'confirmado')`,
-          [userEmail.toLowerCase(), googleId, firstName, lastName, fullName, picture, locale, newJwd]
-        )
-        userId = result.insertId
-        isNew = true
-        console.log(`[google-auth] Nuevo usuario creado: ${userEmail} (ID: ${userId})`)
+      user = await findUserByEmail(userEmail)
+      if (!user) {
+        console.error("[google-auth] Failed to reload user after update")
+        return NextResponse.redirect(`${BASE_URL}/?error=db_error`)
       }
-    } catch (dbInsertError) {
-      console.error("[google-auth] Database INSERT/UPDATE failed:", dbInsertError)
-      return NextResponse.redirect(`${BASE_URL}/?error=db_save_failed`)
+    } else {
+      const userId = await createUser({
+        email: userEmail,
+        firstName,
+        lastName,
+        fullName,
+        picture,
+        googleId,
+        locale,
+        role: "user",
+      })
+      isNew = true
+      console.log(`[google-auth] Nuevo usuario creado: ${userEmail} (ID: ${userId})`)
+
+      user = await findUserByEmail(userEmail)
+      if (!user) {
+        console.error("[google-auth] Failed to load newly created user")
+        return NextResponse.redirect(`${BASE_URL}/?error=db_error`)
+      }
     }
 
     const eventType = isNew ? "REGISTRO" : "LOGIN"
     console.log(`[google-auth] ${eventType} for ${userEmail}`)
 
-    const response = NextResponse.redirect(new URL(finalRedirect, BASE_URL))
-    response.cookies.set({
-      name: COOKIE_NAME,
-      value: newJwd,
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      domain: COOKIE_DOMAIN,
-      maxAge: COOKIE_MAX_AGE,
-    })
+    await createSession(user)
 
-    return response
+    return NextResponse.redirect(new URL(finalRedirect, BASE_URL))
   } catch (err) {
     console.error("[google-auth] GET Error:", err)
     return NextResponse.redirect(`${BASE_URL}/?error=auth_failed`)

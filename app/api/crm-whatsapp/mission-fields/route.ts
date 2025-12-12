@@ -4,16 +4,18 @@ import { RowDataPacket } from 'mysql2';
 
 export const dynamic = 'force-dynamic';
 
-const SYSTEM_COLUMNS = ['id', 'created_at', 'updated_at', 'instance_email'];
+// Columnas excluidas de la misión (mismas que el tablero de contactos)
+const EXCLUDED_COLUMNS = [
+  'id', 'phone', 'email', 'instance_email', 'created_at', 'updated_at',
+  'seguimiento'
+];
 
+// Metadata para campos conocidos
 const FIELD_METADATA: Record<string, { label: string; description: string; type: 'string' | 'number' | 'enum'; values?: string[] }> = {
-  phone: { label: 'Teléfono', description: 'Número de teléfono del contacto', type: 'string' },
   name: { label: 'Nombre', description: 'Nombre completo del cliente', type: 'string' },
-  email: { label: 'Email', description: 'Correo electrónico', type: 'string' },
-  seguimiento: { label: 'Seguimiento', description: 'Estado de seguimiento', type: 'enum', values: ['SEGUIMIENTO 1', 'SEGUIMIENTO 2', 'SEGUIMIENTO 3', 'SEGUIMIENTO 4'] },
-  action_status: { label: 'Estado de Acción', description: 'Estado actual del contacto', type: 'enum', values: ['PENDIENTE', 'EN PROCESO', 'COMPLETADO'] },
-  sequence_status: { label: 'Estado de Secuencia', description: 'Estado de la secuencia automática', type: 'string' },
-  message_to_send: { label: 'Mensaje a Enviar', description: 'Mensaje pendiente de envío', type: 'string' },
+  accion: { label: 'Acción', description: 'Tipo de operación que busca el cliente', type: 'enum', values: ['COMPRA', 'ALQUILER', 'VENTA'] },
+  zona: { label: 'Zona', description: 'Zona o barrio de interés', type: 'string' },
+  presupuesto: { label: 'Presupuesto', description: 'Monto aproximado que maneja el cliente', type: 'number' },
 };
 
 export async function GET() {
@@ -26,7 +28,7 @@ export async function GET() {
     );
 
     const fields = (columns as any[])
-      .filter(col => !SYSTEM_COLUMNS.includes(col.COLUMN_NAME))
+      .filter(col => !EXCLUDED_COLUMNS.includes(col.COLUMN_NAME))
       .map(col => {
         const name = col.COLUMN_NAME;
         const sqlType = col.DATA_TYPE.toLowerCase();
