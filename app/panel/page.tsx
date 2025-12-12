@@ -479,7 +479,7 @@ export default function PanelPage() {
     }
   }, []);
 
-  const handleSavePromptConfig = async (key: string, value: string | object) => {
+  const handleSavePromptConfig = async (key: string, value: string | object, skipReload = false) => {
     try {
       const response = await fetch('/api/crm-whatsapp/prompt-config', {
         method: 'PUT',
@@ -487,10 +487,12 @@ export default function PanelPage() {
         body: JSON.stringify({ config_key: key, config_value: value }),
       });
       if (!response.ok) throw new Error('Error guardando');
-      await fetch('/api/crm-whatsapp/prompt-config', { method: 'POST' });
-      toast.success('Configuración guardada');
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      if (!skipReload) {
+        await fetch('/api/crm-whatsapp/prompt-config', { method: 'POST' });
+        toast.success('Configuración guardada');
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      }
     } catch (err) {
       console.error('Error guardando:', err);
       toast.error('Error al guardar configuración');

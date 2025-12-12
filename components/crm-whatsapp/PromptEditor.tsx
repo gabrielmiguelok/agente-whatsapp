@@ -15,7 +15,7 @@ import { ConfirmModal } from './ConfirmModal';
 interface PromptEditorProps {
   config: PromptConfig | null;
   loading: boolean;
-  onSave: (key: string, value: string | object) => Promise<void>;
+  onSave: (key: string, value: string | object, skipReload?: boolean) => Promise<void>;
   onReload: () => Promise<void>;
 }
 
@@ -72,8 +72,9 @@ export function PromptEditor({ config, loading, onSave, onReload }: PromptEditor
       ];
       for (const key of keys) {
         const value = localConfig[key as keyof PromptConfig];
-        if (value !== undefined) await onSave(key, value as string | object);
+        if (value !== undefined) await onSave(key, value as string | object, true);
       }
+      await fetch('/api/crm-whatsapp/prompt-config', { method: 'POST' });
       setHasChanges(false);
       setShowSaveSuccessModal(true);
     } finally {
