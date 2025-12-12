@@ -10,6 +10,7 @@ import {
   QRCodeDisplay,
   ActionButton,
   PromptEditor,
+  ConfirmModal,
 } from '@/components/crm-whatsapp';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -33,8 +34,11 @@ import {
   Square,
   QrCode,
   Trash2,
-  ChevronRight,
-  LayoutDashboard
+  TrendingUp,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Activity
 } from 'lucide-react';
 
 const SESSION_ID = 'agentewhatsapp';
@@ -114,12 +118,75 @@ interface User {
 }
 
 const tabConfig = [
-  { id: 'contacts' as MainTab, label: 'Contactos', icon: Users, description: 'Gestiona tus contactos de WhatsApp' },
-  { id: 'messages' as MainTab, label: 'Mensajes', icon: MessageSquare, description: 'Historial de conversaciones' },
-  { id: 'whatsapp' as MainTab, label: 'WhatsApp', icon: Smartphone, description: 'Conexión y estado' },
-  { id: 'config' as MainTab, label: 'Config IA', icon: Bot, description: 'Configuración del asistente' },
-  { id: 'users' as MainTab, label: 'Usuarios', icon: Shield, description: 'Administración de usuarios' },
+  {
+    id: 'contacts' as MainTab,
+    label: 'Contactos',
+    icon: Users,
+  },
+  {
+    id: 'messages' as MainTab,
+    label: 'Mensajes',
+    icon: MessageSquare,
+  },
+  {
+    id: 'whatsapp' as MainTab,
+    label: 'WhatsApp',
+    icon: Smartphone,
+  },
+  {
+    id: 'config' as MainTab,
+    label: 'Config IA',
+    icon: Bot,
+  },
+  {
+    id: 'users' as MainTab,
+    label: 'Usuarios',
+    icon: Shield,
+  },
 ];
+
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ComponentType<{ className?: string }>;
+  trend?: {
+    value: string;
+    positive: boolean;
+  };
+}
+
+function StatCard({ title, value, icon: Icon, trend }: StatCardProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:shadow-sm transition-shadow"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 dark:from-emerald-400/10 dark:to-emerald-500/10 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+            {title}
+          </p>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+              {value}
+            </h3>
+            {trend && (
+              <span className={`flex items-center gap-0.5 text-xs font-medium ${trend.positive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                <TrendingUp className={`w-3 h-3 ${!trend.positive && 'rotate-180'}`} />
+                {trend.value}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function PanelPage() {
   const router = useRouter();
@@ -135,6 +202,7 @@ export default function PanelPage() {
   const [wsError, setWsError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
+  const [showDeleteSessionModal, setShowDeleteSessionModal] = useState(false);
 
   const [promptConfig, setPromptConfig] = useState<PromptConfig | null>(null);
   const [promptLoading, setPromptLoading] = useState(false);
@@ -465,9 +533,6 @@ export default function PanelPage() {
   };
 
   const handleDeleteSession = async () => {
-    if (!confirm('¿Eliminar la sesión? Se borrarán las credenciales y deberás escanear un nuevo QR.')) {
-      return;
-    }
     setActionLoading('delete');
     try {
       const response = await fetch(`/api/whatsapp/sessions/${SESSION_ID}`, {
@@ -477,6 +542,7 @@ export default function PanelPage() {
       if (!data.success) throw new Error(data.error || 'Error eliminando sesión');
       setSession(null);
       setWsError(null);
+      setShowDeleteSessionModal(false);
       toast.success('Sesión eliminada');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error eliminando sesión';
@@ -540,331 +606,571 @@ export default function PanelPage() {
     }
   };
 
+  const stats = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const messagesToday = Array.isArray(data)
+      ? data.filter((msg: any) => new Date(msg.created_at) >= today).length
+      : 0;
+
+    const totalContacts = activeTab === 'contacts' ? (Array.isArray(data) ? data.length : 0) : 0;
+
+    const connectedSince = session?.connectedAt
+      ? (() => {
+          const diff = Date.now() - new Date(session.connectedAt).getTime();
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const days = Math.floor(hours / 24);
+          return days > 0 ? `${days}d ${hours % 24}h` : `${hours}h`;
+        })()
+      : '-';
+
+    return {
+      totalContacts,
+      messagesToday,
+      whatsappStatus: session?.status || 'disconnected',
+      connectedSince,
+    };
+  }, [data, activeTab, session]);
+
   if (checkingAuth || !currentUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-emerald-500/20 rounded-full" />
-            <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-emerald-500 rounded-full animate-spin" />
-          </div>
-          <p className="text-gray-400 font-medium">Verificando acceso...</p>
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="relative"
+          >
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg">
+              <Zap className="w-8 h-8 text-white" />
+            </div>
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+              className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-emerald-400 rounded-xl"
+            />
+          </motion.div>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-gray-300 font-medium"
+          >
+            Verificando acceso...
+          </motion.p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Toaster position="top-right" />
 
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo y estado */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
-                    <Zap className="w-5 h-5 text-white" />
-                  </div>
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(session?.status)}`} />
-                </div>
-                <div className="hidden sm:block">
-                  <h1 className="text-lg font-bold text-gray-900 dark:text-white">Panel de Control</h1>
-                  <div className="flex items-center gap-2">
-                    <StatusIndicator status={session?.status || 'disconnected'} size="sm" showLabel />
-                  </div>
+      {/* Compact Header */}
+      <motion.header
+        initial={{ y: -10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800"
+      >
+        <div className="max-w-[1800px] mx-auto px-6">
+          <div className="flex items-center justify-between h-14">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm relative">
+                <Zap className="w-5 h-5 text-white" />
+                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-900 ${getStatusColor(session?.status)}`} />
+              </div>
+
+              <div>
+                <h1 className="text-base font-semibold text-gray-900 dark:text-white">
+                  Panel de Control
+                </h1>
+                <div className="flex items-center gap-2">
+                  <StatusIndicator status={session?.status || 'disconnected'} size="sm" showLabel={false} />
+                  {session?.status === 'connected' && session.phone && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {session.phone}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Usuario y acciones */}
             <div className="flex items-center gap-3">
-              {session?.phone && session.status === 'connected' && (
-                <Badge variant="outline" className="hidden md:flex gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
-                  <Smartphone className="w-3.5 h-3.5" />
-                  {session.phone}
-                </Badge>
-              )}
-
-              <div className="flex items-center gap-2 pl-3 border-l border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
                 {currentUser.picture ? (
-                  <img src={currentUser.picture} alt="" className="w-8 h-8 rounded-full" />
+                  <img
+                    src={currentUser.picture}
+                    alt=""
+                    className="w-8 h-8 rounded-lg"
+                  />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-medium">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white text-sm font-semibold">
                     {currentUser.name?.charAt(0).toUpperCase() || 'U'}
                   </div>
                 )}
-                <div className="hidden md:block text-right">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[120px]">
-                    {currentUser.name}
-                  </p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Admin</p>
-                </div>
+                <span className="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {currentUser.name}
+                </span>
               </div>
 
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleLogout}
-                className="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400"
+                className="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 h-8 px-2"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline ml-2">Salir</span>
               </Button>
             </div>
           </div>
         </div>
-      </header>
+      </motion.header>
 
       {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as MainTab)} className="space-y-6">
-          {/* Tab Navigation */}
-          <div className="bg-white dark:bg-gray-800/50 rounded-2xl p-1.5 shadow-sm border border-gray-200 dark:border-gray-700/50">
-            <TabsList className="grid grid-cols-5 gap-1 bg-transparent h-auto p-0">
+      <main className="max-w-[1800px] mx-auto px-6 py-6">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as MainTab)} className="space-y-4">
+          {/* Compact Stats */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3"
+          >
+            <StatCard
+              title="Contactos"
+              value={stats.totalContacts}
+              icon={Users}
+              trend={{ value: "+12%", positive: true }}
+            />
+            <StatCard
+              title="Mensajes hoy"
+              value={stats.messagesToday}
+              icon={MessageSquare}
+              trend={{ value: "+8%", positive: true }}
+            />
+            <StatCard
+              title="WhatsApp"
+              value={session?.status === 'connected' ? 'Conectado' : 'Desconectado'}
+              icon={Smartphone}
+            />
+            <StatCard
+              title="Tiempo activo"
+              value={stats.connectedSince}
+              icon={Clock}
+            />
+          </motion.div>
+
+          {/* Compact Tab Pills */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-1"
+          >
+            <div className="flex items-center gap-1 overflow-x-auto">
               {tabConfig.map((tab) => (
-                <TabsTrigger
+                <button
                   key={tab.id}
-                  value={tab.id}
-                  className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-emerald-500/25 data-[state=inactive]:text-gray-600 data-[state=inactive]:dark:text-gray-400 data-[state=inactive]:hover:bg-gray-100 data-[state=inactive]:dark:hover:bg-gray-700/50"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
                 >
                   <tab.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </TabsTrigger>
+                  <span>{tab.label}</span>
+                </button>
               ))}
-            </TabsList>
-          </div>
+            </div>
+          </motion.div>
 
           {/* Tab Content: Contacts */}
-          <TabsContent value="contacts" className="mt-0">
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-800/50 overflow-hidden">
-              <div style={{ height: 'calc(100vh - 220px)' }}>
-                {isHydrated && (
-                  <CustomTable
-                    data={data}
-                    columnsDef={getColumns()}
-                    pageSize={50}
-                    loading={loading}
-                    showFiltersToolbar={true}
-                    containerHeight="100%"
-                    rowHeight={32}
-                    onCellEdit={async (rowId: string, colId: string, newValue: string) => {
-                      try { await updateCell(rowId, colId, newValue); } catch {}
-                    }}
-                    onAddColumn={handleAddColumn}
-                    onDeleteColumn={handleDeleteColumn}
-                    deletableColumns={deletableColumnNames}
-                    onRefresh={refetch}
-                  />
-                )}
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Tab Content: Messages */}
-          <TabsContent value="messages" className="mt-0">
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-800/50 overflow-hidden">
-              <div style={{ height: 'calc(100vh - 220px)' }}>
-                {isHydrated && (
-                  <CustomTable
-                    data={data}
-                    columnsDef={messagesColumns}
-                    pageSize={50}
-                    loading={loading}
-                    showFiltersToolbar={true}
-                    containerHeight="100%"
-                    rowHeight={32}
-                    onRefresh={refetch}
-                  />
-                )}
-              </div>
-            </Card>
-          </TabsContent>
-
-          {/* Tab Content: WhatsApp */}
-          <TabsContent value="whatsapp" className="mt-0">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* QR Card */}
-              <Card className="border-0 shadow-xl bg-white dark:bg-gray-800/50 overflow-hidden">
-                <CardHeader className="border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <QrCode className="w-5 h-5 text-emerald-500" />
-                    Código QR
-                  </CardTitle>
-                  <CardDescription>Escaneá el código con WhatsApp</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <QRCodeDisplay qrCode={session?.qrCode || null} status={session?.status || 'disconnected'} />
-                </CardContent>
-              </Card>
-
-              {/* Control Card */}
-              <Card className="border-0 shadow-xl bg-white dark:bg-gray-800/50 overflow-hidden">
-                <CardHeader className="border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Settings className="w-5 h-5 text-emerald-500" />
-                    Control de Sesión
-                  </CardTitle>
-                  <CardDescription>Gestiona la conexión de WhatsApp</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 space-y-6">
-                  {/* Estado de conexión */}
-                  {session?.connectedAt && session?.status === 'connected' && (
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-emerald-100/50 dark:from-emerald-900/20 dark:to-emerald-800/10 border border-emerald-200 dark:border-emerald-800/50">
+          <AnimatePresence mode="wait">
+            <TabsContent value="contacts" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card className="border border-gray-200 dark:border-gray-800 shadow-sm rounded-lg overflow-hidden">
+                  <CardHeader className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 p-4">
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                          <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse" />
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/10 to-cyan-500/10 dark:from-blue-400/10 dark:to-cyan-400/10 flex items-center justify-center">
+                          <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
-                          <p className="font-medium text-emerald-800 dark:text-emerald-200">
-                            Conectado {session.phone ? `(${session.phone})` : ''}
-                          </p>
-                          <p className="text-sm text-emerald-600 dark:text-emerald-400">
-                            Desde {new Date(session.connectedAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                          </p>
+                          <CardTitle className="text-base">Contactos</CardTitle>
+                          <CardDescription className="text-xs">
+                            Base de contactos de WhatsApp
+                          </CardDescription>
                         </div>
                       </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {stats.totalContacts} contactos
+                      </Badge>
                     </div>
-                  )}
-
-                  {wsError && (
-                    <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50">
-                      <p className="text-sm text-red-600 dark:text-red-400">{wsError}</p>
-                    </div>
-                  )}
-
-                  {/* Acciones principales */}
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Acciones
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {session?.status !== 'connected' && session?.status !== 'connecting' && (
-                        <ActionButton
-                          variant="success"
-                          onClick={() => handleAction('start')}
-                          loading={actionLoading === 'start'}
-                          disabled={actionLoading !== null}
-                          icon={<Play className="w-4 h-4" />}
-                        >
-                          Iniciar
-                        </ActionButton>
-                      )}
-
-                      {(session?.status === 'connected' || session?.status === 'connecting' || session?.status === 'qr_pending') && (
-                        <ActionButton
-                          variant="warning"
-                          onClick={() => handleAction('stop')}
-                          loading={actionLoading === 'stop'}
-                          disabled={actionLoading !== null}
-                          icon={<Square className="w-4 h-4" />}
-                        >
-                          Detener
-                        </ActionButton>
-                      )}
-
-                      <ActionButton
-                        variant="secondary"
-                        onClick={fetchSession}
-                        disabled={actionLoading !== null}
-                        icon={<RefreshCw className="w-4 h-4" />}
-                      >
-                        Actualizar
-                      </ActionButton>
-                    </div>
+                  </CardHeader>
+                  <div style={{ height: 'calc(100vh - 360px)' }}>
+                    {isHydrated && (
+                      <CustomTable
+                        data={data}
+                        columnsDef={getColumns()}
+                        pageSize={50}
+                        loading={loading}
+                        showFiltersToolbar={true}
+                        containerHeight="100%"
+                        rowHeight={32}
+                        onCellEdit={async (rowId: string, colId: string, newValue: string) => {
+                          try { await updateCell(rowId, colId, newValue); } catch {}
+                        }}
+                        onAddColumn={handleAddColumn}
+                        onDeleteColumn={handleDeleteColumn}
+                        deletableColumns={deletableColumnNames}
+                        onRefresh={refetch}
+                      />
+                    )}
                   </div>
+                </Card>
+              </motion.div>
+            </TabsContent>
 
-                  {/* Acciones avanzadas */}
-                  <div className="pt-4 border-t border-gray-100 dark:border-gray-700/50 space-y-3">
-                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Opciones Avanzadas
-                    </p>
+            {/* Tab Content: Messages */}
+            <TabsContent value="messages" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card className="border border-gray-200 dark:border-gray-800 shadow-sm rounded-lg overflow-hidden">
+                  <CardHeader className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 dark:from-purple-400/10 dark:to-pink-400/10 flex items-center justify-center">
+                          <MessageSquare className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">Mensajes</CardTitle>
+                          <CardDescription className="text-xs">
+                            Historial de conversaciones
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {stats.messagesToday} hoy
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <div style={{ height: 'calc(100vh - 360px)' }}>
+                    {isHydrated && (
+                      <CustomTable
+                        data={data}
+                        columnsDef={messagesColumns}
+                        pageSize={50}
+                        loading={loading}
+                        showFiltersToolbar={true}
+                        containerHeight="100%"
+                        rowHeight={32}
+                        onRefresh={refetch}
+                      />
+                    )}
+                  </div>
+                </Card>
+              </motion.div>
+            </TabsContent>
+
+            {/* Tab Content: WhatsApp */}
+            <TabsContent value="whatsapp" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+              >
+                {/* QR Card */}
+                <Card className="border border-gray-200 dark:border-gray-800 shadow-sm rounded-lg overflow-hidden">
+                  <CardHeader className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-500/10 dark:from-emerald-400/10 dark:to-teal-400/10 flex items-center justify-center">
+                        <QrCode className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Código QR</CardTitle>
+                        <CardDescription className="text-xs">
+                          Escanear con WhatsApp
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <div className="relative">
+                      <QRCodeDisplay
+                        qrCode={session?.qrCode || null}
+                        status={session?.status || 'disconnected'}
+                      />
+                      {session?.status === 'connected' && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute top-2 right-2 w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg"
+                        >
+                          <CheckCircle2 className="w-5 h-5 text-white" />
+                        </motion.div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Control Card */}
+                <Card className="border border-gray-200 dark:border-gray-800 shadow-sm rounded-lg overflow-hidden">
+                  <CardHeader className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/10 to-orange-500/10 dark:from-amber-400/10 dark:to-orange-400/10 flex items-center justify-center">
+                        <Settings className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Control de Sesión</CardTitle>
+                        <CardDescription className="text-xs">
+                          Gestiona la conexión
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-4">
+                    {session?.connectedAt && session?.status === 'connected' && (
+                      <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                              Conectado
+                            </p>
+                            <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                              {session.phone && `${session.phone} • `}
+                              {new Date(session.connectedAt).toLocaleString('es-AR', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {wsError && (
+                      <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          <p className="text-xs text-red-600 dark:text-red-400">{wsError}</p>
+                        </div>
+                      </motion.div>
+                    )}
+
                     <div className="space-y-2">
-                      <ActionButton
-                        variant="primary"
-                        onClick={handleNewSession}
-                        loading={actionLoading === 'new'}
-                        disabled={actionLoading !== null}
-                        icon={<QrCode className="w-4 h-4" />}
-                        className="w-full"
-                      >
-                        Generar Nuevo QR
-                      </ActionButton>
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                        Acciones
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {session?.status !== 'connected' && session?.status !== 'connecting' && (
+                          <ActionButton
+                            variant="success"
+                            onClick={() => handleAction('start')}
+                            loading={actionLoading === 'start'}
+                            disabled={actionLoading !== null}
+                            icon={<Play className="w-4 h-4" />}
+                          >
+                            Iniciar
+                          </ActionButton>
+                        )}
 
-                      <ActionButton
-                        variant="danger"
-                        onClick={handleDeleteSession}
-                        loading={actionLoading === 'delete'}
-                        disabled={actionLoading !== null}
-                        icon={<Trash2 className="w-4 h-4" />}
-                        className="w-full"
-                      >
-                        Eliminar Sesión
-                      </ActionButton>
+                        {(session?.status === 'connected' || session?.status === 'connecting' || session?.status === 'qr_pending') && (
+                          <ActionButton
+                            variant="warning"
+                            onClick={() => handleAction('stop')}
+                            loading={actionLoading === 'stop'}
+                            disabled={actionLoading !== null}
+                            icon={<Square className="w-4 h-4" />}
+                          >
+                            Detener
+                          </ActionButton>
+                        )}
+
+                        <ActionButton
+                          variant="secondary"
+                          onClick={fetchSession}
+                          disabled={actionLoading !== null}
+                          icon={<RefreshCw className="w-4 h-4" />}
+                        >
+                          Actualizar
+                        </ActionButton>
+                      </div>
                     </div>
+
+                    <div className="pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                        Avanzado
+                      </p>
+                      <div className="space-y-2">
+                        <ActionButton
+                          variant="primary"
+                          onClick={handleNewSession}
+                          loading={actionLoading === 'new'}
+                          disabled={actionLoading !== null}
+                          icon={<QrCode className="w-4 h-4" />}
+                          className="w-full"
+                        >
+                          Generar Nuevo QR
+                        </ActionButton>
+
+                        <ActionButton
+                          variant="danger"
+                          onClick={() => setShowDeleteSessionModal(true)}
+                          disabled={actionLoading !== null}
+                          icon={<Trash2 className="w-4 h-4" />}
+                          className="w-full"
+                        >
+                          Eliminar Sesión
+                        </ActionButton>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
+
+            {/* Tab Content: Config IA - Sin wrapper Card para diseño más limpio */}
+            <TabsContent value="config" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="rounded-lg border border-gray-200 dark:border-gray-800 bg-background overflow-hidden"
+                style={{ height: 'calc(100vh - 260px)', minHeight: '450px' }}
+              >
+                <PromptEditor
+                  config={promptConfig}
+                  loading={promptLoading}
+                  onSave={handleSavePromptConfig}
+                  onReload={fetchPromptConfig}
+                />
+              </motion.div>
+            </TabsContent>
+
+            {/* Tab Content: Users */}
+            <TabsContent value="users" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card className="border border-gray-200 dark:border-gray-800 shadow-sm rounded-lg overflow-hidden">
+                  <CardHeader className="border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-500/10 to-red-500/10 dark:from-rose-400/10 dark:to-red-400/10 flex items-center justify-center">
+                          <Shield className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">Usuarios</CardTitle>
+                          <CardDescription className="text-xs">
+                            Administra permisos de acceso
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {users.length} usuarios
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <div style={{ height: 'calc(100vh - 360px)' }}>
+                    {isHydrated && (
+                      <CustomTable
+                        data={users}
+                        columnsDef={usersColumns}
+                        pageSize={50}
+                        loading={usersLoading}
+                        showFiltersToolbar={true}
+                        containerHeight="100%"
+                        rowHeight={40}
+                        onCellEdit={handleUserCellEdit}
+                        onRefresh={fetchUsers}
+                      />
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Tab Content: Config IA */}
-          <TabsContent value="config" className="mt-0">
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-800/50 overflow-hidden" style={{ minHeight: '600px' }}>
-              <PromptEditor
-                config={promptConfig}
-                loading={promptLoading}
-                onSave={handleSavePromptConfig}
-                onReload={fetchPromptConfig}
-              />
-            </Card>
-          </TabsContent>
-
-          {/* Tab Content: Users */}
-          <TabsContent value="users" className="mt-0">
-            <Card className="border-0 shadow-xl bg-white dark:bg-gray-800/50 overflow-hidden">
-              <CardHeader className="border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Shield className="w-5 h-5 text-emerald-500" />
-                  Usuarios del Sistema
-                </CardTitle>
-                <CardDescription>Administrá los usuarios y permisos. Cambiá el rol a "admin" para otorgar acceso completo.</CardDescription>
-              </CardHeader>
-              <div style={{ height: 'calc(100vh - 320px)' }}>
-                {isHydrated && (
-                  <CustomTable
-                    data={users}
-                    columnsDef={usersColumns}
-                    pageSize={50}
-                    loading={usersLoading}
-                    showFiltersToolbar={true}
-                    containerHeight="100%"
-                    rowHeight={40}
-                    onCellEdit={handleUserCellEdit}
-                    onRefresh={fetchUsers}
-                  />
-                )}
-              </div>
-            </Card>
-          </TabsContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
         </Tabs>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-200 dark:border-gray-800 py-4 mt-auto">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-emerald-500" />
-            <span>Panel de Control - Automatización WhatsApp con IA</span>
-          </div>
-          <div className="hidden sm:block">
-            delegar.space
+      {/* Compact Footer */}
+      <motion.footer
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-3 mt-auto"
+      >
+        <div className="max-w-[1800px] mx-auto px-6">
+          <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                <Zap className="w-3 h-3 text-white" />
+              </div>
+              <span className="font-medium">Panel WhatsApp</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <a
+                href="https://delegar.space"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+              >
+                delegar.space
+              </a>
+              <div className="flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <span>Sistema activo</span>
+              </div>
+            </div>
           </div>
         </div>
-      </footer>
+      </motion.footer>
+
+      {/* Modal de confirmación para eliminar sesión */}
+      <ConfirmModal
+        isOpen={showDeleteSessionModal}
+        onClose={() => setShowDeleteSessionModal(false)}
+        onConfirm={handleDeleteSession}
+        title="Eliminar sesión de WhatsApp"
+        message="¿Estás seguro? Se borrarán las credenciales guardadas y deberás escanear un nuevo código QR para volver a conectar."
+        confirmText="Sí, eliminar"
+        cancelText="Cancelar"
+        variant="danger"
+        loading={actionLoading === 'delete'}
+      />
     </div>
   );
 }
