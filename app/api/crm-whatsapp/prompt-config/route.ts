@@ -28,6 +28,7 @@ const EDITABLE_KEYS = [
   'trigger_vip_phones',
   'trigger_context_instructions',
   'trigger_ignore_duration_hours',
+  'trigger_keywords',
 ];
 
 /**
