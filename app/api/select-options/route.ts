@@ -58,7 +58,7 @@ const ALLOWED_CONFIG: Record<string, { table: string; allowedFields: string[]; v
   // ========== WHATSAPP CRM ==========
   contacts: {
     table: 'contacts',
-    allowedFields: ['seguimiento'],
+    allowedFields: ['seguimiento', 'zona', 'presupuesto'],
   },
 };
 
