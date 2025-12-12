@@ -2,9 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  User, Target, Lightbulb, Zap, ShieldOff, Lock,
+  Plus, X, Sparkles, Info, AlertTriangle, Trash2,
+  Clock, CheckCircle2, RefreshCw, Save, ChevronRight
+} from 'lucide-react';
 import type { PromptConfig, MissionField } from '@/lib/whatsapp/types/promptConfig';
 import CustomTable from '@/CustomTable';
 import { buildColumnsFromDefinition } from '@/CustomTable/CustomTableColumnsConfig';
+import { ConfirmModal } from './ConfirmModal';
 
 interface PromptEditorProps {
   config: PromptConfig | null;
@@ -25,74 +31,21 @@ interface IgnoredContact {
 
 type TabId = 'identity' | 'mission' | 'strategy' | 'trigger' | 'ignored' | 'rules';
 
-interface Tab {
-  id: TabId;
-  label: string;
-  icon: React.ReactNode;
-}
-
-const tabs: Tab[] = [
-  {
-    id: 'identity',
-    label: 'Identidad',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'mission',
-    label: 'Misión',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-      </svg>
-    ),
-  },
-  {
-    id: 'strategy',
-    label: 'Estrategia',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'trigger',
-    label: 'Disparador',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    ),
-  },
-  {
-    id: 'ignored',
-    label: 'Ignorados',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-      </svg>
-    ),
-  },
-  {
-    id: 'rules',
-    label: 'Reglas',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-      </svg>
-    ),
-  },
+const tabs: { id: TabId; label: string; shortLabel: string; icon: React.ElementType }[] = [
+  { id: 'identity', label: 'Identidad', shortLabel: 'ID', icon: User },
+  { id: 'mission', label: 'Misión', shortLabel: 'MIS', icon: Target },
+  { id: 'strategy', label: 'Estrategia', shortLabel: 'EST', icon: Lightbulb },
+  { id: 'trigger', label: 'Disparador', shortLabel: 'TRG', icon: Zap },
+  { id: 'ignored', label: 'Ignorados', shortLabel: 'IGN', icon: ShieldOff },
+  { id: 'rules', label: 'Reglas', shortLabel: 'RUL', icon: Lock },
 ];
 
 export function PromptEditor({ config, loading, onSave, onReload }: PromptEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('identity');
-  const [saving, setSaving] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [localConfig, setLocalConfig] = useState<PromptConfig | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
 
   useEffect(() => {
     if (config) {
@@ -102,224 +55,245 @@ export function PromptEditor({ config, loading, onSave, onReload }: PromptEditor
   }, [config]);
 
   const handleChange = useCallback((key: string, value: unknown) => {
-    setLocalConfig(prev => {
-      if (!prev) return null;
-      return { ...prev, [key]: value };
-    });
+    setLocalConfig(prev => prev ? { ...prev, [key]: value } : null);
     setHasChanges(true);
   }, []);
 
-  const handleSave = async (key: string) => {
-    if (!localConfig) return;
-    setSaving(key);
-    try {
-      const value = localConfig[key as keyof PromptConfig];
-      await onSave(key, value as string | object);
-      setHasChanges(false);
-    } finally {
-      setSaving(null);
-    }
-  };
-
   const handleSaveAll = async () => {
     if (!localConfig) return;
-    setSaving('all');
+    setSaving(true);
     try {
-      const editableKeys = [
-        'assistant_name',
-        'mission_fields',
-        'conversation_strategy',
-        'question_examples',
-        'mission_complete_message',
-        'extraction_rules',
-        'base_identity',
-        'unbreakable_rules',
-        'trigger_criteria',
-        'trigger_examples_positive',
-        'trigger_examples_negative',
-        'trigger_vip_phones',
-        'trigger_context_instructions',
-        'trigger_ignore_duration_hours',
+      const keys = [
+        'assistant_name', 'mission_fields', 'conversation_strategy', 'question_examples',
+        'mission_complete_message', 'extraction_rules', 'base_identity', 'unbreakable_rules',
+        'trigger_criteria', 'trigger_examples_positive', 'trigger_examples_negative',
+        'trigger_vip_phones', 'trigger_context_instructions', 'trigger_ignore_duration_hours',
         'trigger_keywords',
       ];
-      for (const key of editableKeys) {
+      for (const key of keys) {
         const value = localConfig[key as keyof PromptConfig];
-        if (value !== undefined) {
-          await onSave(key, value as string | object);
-        }
+        if (value !== undefined) await onSave(key, value as string | object);
       }
       setHasChanges(false);
+      setShowSaveSuccessModal(true);
     } finally {
-      setSaving(null);
+      setSaving(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-full gap-2">
         <motion.div
-          className="w-8 h-8 border-3 border-blue-500/30 border-t-blue-500 rounded-full"
+          className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full"
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
         />
+        <span className="text-sm text-muted-foreground">Cargando...</span>
       </div>
     );
   }
 
   if (!localConfig) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        No se pudo cargar la configuración
+      <div className="flex flex-col items-center justify-center h-full gap-2">
+        <AlertTriangle className="w-8 h-8 text-amber-500" />
+        <p className="text-sm text-muted-foreground">No se pudo cargar</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Tab Navigation */}
-      <div className="flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex gap-1 px-2 py-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${activeTab === tab.id
-                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }
-              `}
-            >
-              {tab.icon}
-              {tab.label}
-            </button>
-          ))}
+    <div className="h-full flex flex-col lg:flex-row" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}>
+      {/* Sidebar - Vertical en desktop, horizontal en mobile */}
+      <div className="flex-shrink-0 lg:w-44 border-b lg:border-b-0 lg:border-r border-border bg-muted/30">
+        {/* Mobile: horizontal scroll */}
+        <nav className="flex lg:flex-col gap-1 p-2 overflow-x-auto lg:overflow-visible"
+             style={{ WebkitOverflowScrolling: 'touch' }}>
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
+                           whitespace-nowrap transition-all flex-shrink-0
+                           ${isActive
+                             ? 'bg-foreground text-background'
+                             : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="hidden sm:inline lg:inline">{tab.label}</span>
+                <span className="sm:hidden lg:hidden">{tab.shortLabel}</span>
+                {isActive && <ChevronRight className="w-3 h-3 ml-auto hidden lg:block" />}
+              </button>
+            );
+          })}
         </nav>
       </div>
 
-      {/* Tab Content - SIN AnimatePresence para evitar problemas de estado */}
-      <div className="flex-1 overflow-auto p-6">
-        <div style={{ display: activeTab === 'identity' ? 'block' : 'none' }}>
-          <IdentityTab
-            config={localConfig}
-            onChange={handleChange}
-          />
-        </div>
-        <div style={{ display: activeTab === 'mission' ? 'block' : 'none' }}>
-          <MissionTab
-            config={localConfig}
-            onChange={handleChange}
-          />
-        </div>
-        <div style={{ display: activeTab === 'strategy' ? 'block' : 'none' }}>
-          <StrategyTab
-            config={localConfig}
-            onChange={handleChange}
-          />
-        </div>
-        <div style={{ display: activeTab === 'trigger' ? 'block' : 'none' }}>
-          <TriggerTab
-            config={localConfig}
-            onChange={handleChange}
-          />
-        </div>
-        <div style={{ display: activeTab === 'ignored' ? 'block' : 'none' }}>
-          <IgnoredTab />
-        </div>
-        <div style={{ display: activeTab === 'rules' ? 'block' : 'none' }}>
-          <RulesTab
-            config={localConfig}
-            onChange={handleChange}
-          />
+      {/* Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="p-4 lg:p-6">
+            {activeTab === 'identity' && <IdentityTab config={localConfig} onChange={handleChange} />}
+            {activeTab === 'mission' && <MissionTab config={localConfig} onChange={handleChange} />}
+            {activeTab === 'strategy' && <StrategyTab config={localConfig} onChange={handleChange} />}
+            {activeTab === 'trigger' && <TriggerTab config={localConfig} onChange={handleChange} />}
+            {activeTab === 'ignored' && <IgnoredTab />}
+            {activeTab === 'rules' && <RulesTab config={localConfig} onChange={handleChange} />}
+          </div>
         </div>
       </div>
 
-      {/* Footer Actions */}
-      <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 px-6 py-4 bg-gray-50 dark:bg-gray-800/50">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {hasChanges && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                Cambios sin guardar
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <button
+      {/* FAB - Floating Action Button para guardar */}
+      <AnimatePresence>
+        {hasChanges && (
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-2"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}
+          >
+            <motion.button
               onClick={onReload}
-              disabled={saving !== null}
-              className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+              disabled={saving}
+              className="w-10 h-10 rounded-full bg-muted border border-border shadow-lg
+                         flex items-center justify-center text-muted-foreground hover:text-foreground
+                         transition-all disabled:opacity-50"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              Recargar
-            </button>
-            <button
+              <RefreshCw className="w-4 h-4" />
+            </motion.button>
+            <motion.button
               onClick={handleSaveAll}
-              disabled={saving !== null || !hasChanges}
-              className="px-5 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-lg shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:shadow-none flex items-center gap-2"
+              disabled={saving}
+              className="h-10 px-4 rounded-full bg-emerald-600 text-white shadow-lg
+                         flex items-center gap-2 font-semibold text-sm
+                         hover:bg-emerald-700 transition-all disabled:opacity-50"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              {saving === 'all' && (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              {saving ? (
+                <motion.div
+                  className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                />
+              ) : (
+                <Save className="w-4 h-4" />
               )}
-              Guardar y Aplicar
-            </button>
-          </div>
-        </div>
-      </div>
+              Guardar
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={showSaveSuccessModal}
+        onClose={() => setShowSaveSuccessModal(false)}
+        title="¡Guardado!"
+        message="La IA ya está usando los nuevos ajustes."
+        confirmText="OK"
+        variant="success"
+        showCancel={false}
+        onConfirm={() => setShowSaveSuccessModal(false)}
+      />
     </div>
   );
 }
 
-// Identity Tab Component
-function IdentityTab({
-  config,
-  onChange,
-}: {
-  config: PromptConfig;
-  onChange: (key: string, value: unknown) => void;
+// === COMPONENTES BASE ===
+
+function Input({ value, onChange, placeholder, type = 'text', className = '' }: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: 'text' | 'number';
+  className?: string;
 }) {
   return (
-    <div className="space-y-6 max-w-2xl">
+    <input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={`w-full px-3 py-2 text-sm rounded-lg border border-border bg-background
+                 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all
+                 placeholder:text-muted-foreground/50 ${className}`}
+    />
+  );
+}
+
+function Textarea({ value, onChange, placeholder, rows = 4, mono, className = '' }: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  mono?: boolean;
+  className?: string;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className={`w-full px-3 py-2 text-sm rounded-lg border border-border bg-background resize-none
+                 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all
+                 placeholder:text-muted-foreground/50 ${mono ? 'font-mono text-xs' : ''} ${className}`}
+    />
+  );
+}
+
+function Label({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+      <label className="text-xs font-semibold text-foreground">{children}</label>
+      {hint && <span className="text-[10px] text-muted-foreground">{hint}</span>}
+    </div>
+  );
+}
+
+// === TABS ===
+
+function IdentityTab({ config, onChange }: { config: PromptConfig; onChange: (k: string, v: unknown) => void }) {
+  return (
+    <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <User className="w-5 h-5 text-purple-500" />
           Identidad del Asistente
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Configurá cómo se presenta el asistente virtual a los clientes
-        </p>
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">Configurá cómo se presenta la IA</p>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid gap-6 lg:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Nombre del Asistente
-          </label>
-          <input
-            type="text"
+          <Label hint="Variable: {assistant_name}">Nombre</Label>
+          <Input
             value={config.assistant_name}
-            onChange={(e) => onChange('assistant_name', e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            placeholder="Ej: Ana, Carlos, Sofia..."
+            onChange={(v) => onChange('assistant_name', v)}
+            placeholder="Ej: Ana, Carlos..."
           />
-          <p className="mt-2 text-xs text-gray-500">
-            Este nombre se usará en todas las interacciones con los clientes
-          </p>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Identidad Base
-          </label>
-          <textarea
+        <div className="lg:row-span-2">
+          <Label hint="Personalidad y contexto">Identidad Base</Label>
+          <Textarea
             value={config.base_identity || ''}
-            onChange={(e) => onChange('base_identity', e.target.value)}
-            rows={4}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono text-sm resize-none"
-            placeholder="Descripción de la identidad del asistente..."
+            onChange={(v) => onChange('base_identity', v)}
+            rows={8}
+            mono
+            placeholder="Sos {assistant_name}, asistente virtual..."
           />
-          <p className="mt-2 text-xs text-gray-500">
-            Usá {'{assistant_name}'} para insertar el nombre del asistente dinámicamente
+        </div>
+        <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
+          <p className="text-xs text-purple-600 dark:text-purple-400">
+            <strong>Tip:</strong> Usá un nombre simple y una identidad clara que represente tu marca.
           </p>
         </div>
       </div>
@@ -327,735 +301,382 @@ function IdentityTab({
   );
 }
 
-// Mission Tab Component - Simplificado y robusto
-function MissionTab({
-  config,
-  onChange,
-}: {
-  config: PromptConfig;
-  onChange: (key: string, value: unknown) => void;
-}) {
-  const [availableFields, setAvailableFields] = useState<MissionField[]>([]);
+function MissionTab({ config, onChange }: { config: PromptConfig; onChange: (k: string, v: unknown) => void }) {
+  const [fields, setFields] = useState<MissionField[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedField, setExpandedField] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Cargar campos disponibles
   useEffect(() => {
     fetch('/api/crm-whatsapp/mission-fields')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && Array.isArray(data.data)) {
-          setAvailableFields(data.data);
-        }
-      })
-      .catch(console.error)
+      .then(r => r.json())
+      .then(d => d.success && setFields(d.data))
       .finally(() => setLoading(false));
   }, []);
 
-  // Helpers que siempre leen del config actual
-  const getMissionFields = (): MissionField[] => {
-    return Array.isArray(config.mission_fields) ? config.mission_fields : [];
-  };
+  const missionFields = Array.isArray(config.mission_fields) ? config.mission_fields : [];
+  const examples = config.question_examples || {};
+  const rules = config.extraction_rules || {};
+  const isActive = (key: string) => missionFields.some(f => f.key === key);
 
-  const getQuestionExamples = (): Record<string, string[]> => {
-    return config.question_examples && typeof config.question_examples === 'object'
-      ? config.question_examples
-      : {};
-  };
-
-  const getExtractionRules = (): Record<string, string> => {
-    return config.extraction_rules && typeof config.extraction_rules === 'object'
-      ? config.extraction_rules
-      : {};
-  };
-
-  const isActive = (key: string): boolean => {
-    return getMissionFields().some(f => f.key === key);
-  };
-
-  const getFieldConfig = (key: string): MissionField | undefined => {
-    return getMissionFields().find(f => f.key === key);
-  };
-
-  // Toggle field
-  const toggleField = (field: MissionField) => {
-    const currentFields = getMissionFields();
-    const currentExamples = getQuestionExamples();
-    const currentRules = getExtractionRules();
-    const fieldIsActive = currentFields.some(f => f.key === field.key);
-
-    if (fieldIsActive) {
-      // Desactivar
-      const newFields = currentFields.filter(f => f.key !== field.key);
-      onChange('mission_fields', newFields);
-
-      const newExamples = { ...currentExamples };
-      delete newExamples[field.key];
-      onChange('question_examples', newExamples);
-
-      const newRules = { ...currentRules };
-      delete newRules[field.key];
-      onChange('extraction_rules', newRules);
-
-      if (expandedField === field.key) setExpandedField(null);
+  const toggle = (field: MissionField) => {
+    if (isActive(field.key)) {
+      onChange('mission_fields', missionFields.filter(f => f.key !== field.key));
+      const newEx = { ...examples }; delete newEx[field.key];
+      const newRu = { ...rules }; delete newRu[field.key];
+      onChange('question_examples', newEx);
+      onChange('extraction_rules', newRu);
+      if (expanded === field.key) setExpanded(null);
     } else {
-      // Activar
-      const newFields = [...currentFields, { ...field }];
-      onChange('mission_fields', newFields);
-      onChange('question_examples', { ...currentExamples, [field.key]: ['', ''] });
-      onChange('extraction_rules', { ...currentRules, [field.key]: '' });
+      onChange('mission_fields', [...missionFields, { ...field }]);
+      onChange('question_examples', { ...examples, [field.key]: ['', ''] });
+      onChange('extraction_rules', { ...rules, [field.key]: '' });
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full" />
-        <span className="ml-3 text-gray-500">Cargando campos...</span>
-      </div>
-    );
-  }
-
-  const activeCount = getMissionFields().length;
+  if (loading) return <div className="text-sm text-muted-foreground py-8 text-center">Cargando campos...</div>;
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <Target className="w-5 h-5 text-blue-500" />
           Datos a Recopilar
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Activá los campos que el asistente debe obtener de cada cliente
-        </p>
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">Campos que la IA debe obtener de cada cliente</p>
       </div>
 
-      <div className="space-y-2">
-        {availableFields.map((field) => {
-          const active = isActive(field.key);
-          const expanded = expandedField === field.key;
-          const fieldConfig = getFieldConfig(field.key);
-          const examples = getQuestionExamples();
-          const rules = getExtractionRules();
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Lista de campos */}
+        <div className="space-y-2">
+          {fields.map(field => {
+            const active = isActive(field.key);
+            const open = expanded === field.key;
+            const fieldConfig = missionFields.find(f => f.key === field.key);
 
-          return (
-            <div
-              key={field.key}
-              className={`rounded-xl border transition-all ${
-                active
-                  ? 'border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
-              }`}
-            >
-              <div className="flex items-center gap-4 p-4">
-                {/* Toggle Switch */}
-                <button
-                  type="button"
-                  onClick={() => toggleField(field)}
-                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                    active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                      active ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium ${active ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
-                      {field.label}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                      {field.type === 'number' ? 'número' : field.type === 'enum' ? 'opciones' : 'texto'}
-                    </span>
-                  </div>
-                  {field.description && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                      {field.description}
-                    </p>
-                  )}
-                </div>
-
-                {active && (
+            return (
+              <div key={field.key} className={`rounded-lg border transition-all ${active ? 'border-blue-500/50 bg-blue-500/5' : 'border-border'}`}>
+                <div className="flex items-center gap-3 p-2.5">
                   <button
-                    type="button"
-                    onClick={() => setExpandedField(expanded ? null : field.key)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                      expanded
-                        ? 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300'
-                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
+                    onClick={() => toggle(field)}
+                    className={`w-9 h-5 rounded-full transition-all flex-shrink-0 relative ${active ? 'bg-blue-600' : 'bg-muted'}`}
                   >
-                    {expanded ? 'Cerrar' : 'Configurar'}
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${active ? 'left-[18px]' : 'left-0.5'}`} />
                   </button>
-                )}
-              </div>
-
-              {active && expanded && fieldConfig && (
-                <div className="px-4 pb-4 pt-2 border-t border-gray-100 dark:border-gray-700 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Descripción
-                    </label>
-                    <input
-                      type="text"
-                      value={fieldConfig.description || ''}
-                      onChange={(e) => {
-                        const currentFields = getMissionFields();
-                        const newFields = currentFields.map(f =>
-                          f.key === field.key ? { ...f, description: e.target.value } : f
-                        );
-                        onChange('mission_fields', newFields);
-                      }}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Qué debe obtener la IA"
-                    />
+                  <div className="flex-1 min-w-0">
+                    <span className={`text-sm font-medium ${active ? 'text-foreground' : 'text-muted-foreground'}`}>{field.label}</span>
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{field.type}</span>
                   </div>
-
-                  {fieldConfig.type === 'enum' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Opciones válidas (separar con coma)
-                      </label>
-                      <input
-                        type="text"
-                        value={(fieldConfig.values || []).join(', ')}
-                        onChange={(e) => {
-                          const values = e.target.value.split(',').map(v => v.trim().toUpperCase()).filter(Boolean);
-                          const currentFields = getMissionFields();
-                          const newFields = currentFields.map(f =>
-                            f.key === field.key ? { ...f, values } : f
-                          );
-                          onChange('mission_fields', newFields);
-                        }}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="OPCIÓN1, OPCIÓN2, OPCIÓN3"
-                      />
-                    </div>
+                  {active && (
+                    <button onClick={() => setExpanded(open ? null : field.key)} className="text-xs text-blue-600 hover:underline">
+                      {open ? 'Cerrar' : 'Config'}
+                    </button>
                   )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Preguntas de ejemplo
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[0, 1].map(i => (
-                        <input
-                          key={i}
-                          type="text"
-                          value={(examples[field.key] || ['', ''])[i] || ''}
-                          onChange={(e) => {
-                            const currentExamples = getQuestionExamples();
-                            const fieldExamples = currentExamples[field.key] || ['', ''];
-                            const newFieldExamples = [...fieldExamples];
-                            newFieldExamples[i] = e.target.value;
-                            onChange('question_examples', { ...currentExamples, [field.key]: newFieldExamples });
-                          }}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                          placeholder={`Ejemplo ${i + 1}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Regla de extracción
-                    </label>
-                    <textarea
-                      value={rules[field.key] || ''}
-                      onChange={(e) => {
-                        const currentRules = getExtractionRules();
-                        onChange('extraction_rules', { ...currentRules, [field.key]: e.target.value });
-                      }}
-                      rows={2}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-                      placeholder="Cómo debe detectar este dato"
-                    />
-                  </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
 
-      {activeCount > 0 && (
-        <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 font-medium">
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
-          {activeCount} {activeCount === 1 ? 'campo activo' : 'campos activos'}
+                <AnimatePresence>
+                  {active && open && fieldConfig && (
+                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+                      <div className="p-3 space-y-2 border-t border-border/50 bg-blue-500/5">
+                        <div>
+                          <Label>Descripción</Label>
+                          <Input
+                            value={fieldConfig.description || ''}
+                            onChange={(v) => onChange('mission_fields', missionFields.map(f => f.key === field.key ? { ...f, description: v } : f))}
+                            placeholder="Qué debe obtener la IA"
+                          />
+                        </div>
+                        <div>
+                          <Label>Regla de extracción</Label>
+                          <Textarea
+                            value={rules[field.key] || ''}
+                            onChange={(v) => onChange('extraction_rules', { ...rules, [field.key]: v })}
+                            rows={2}
+                            placeholder="Cómo detectar..."
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
-      )}
 
-      <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Instrucciones al completar misión
-        </label>
-        <textarea
-          value={config.mission_complete_message || ''}
-          onChange={(e) => onChange('mission_complete_message', e.target.value)}
-          rows={3}
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-          placeholder="Qué debe hacer el asistente cuando obtiene todos los datos"
-        />
-        <p className="mt-2 text-xs text-gray-500">
-          Cada línea es una instrucción para cerrar la conversación
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// Strategy Tab Component
-function StrategyTab({
-  config,
-  onChange,
-}: {
-  config: PromptConfig;
-  onChange: (key: string, value: unknown) => void;
-}) {
-  return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-          Estrategia de Conversación
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Definí cómo debe interactuar el asistente con los clientes
-        </p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Instrucciones de Conversación
-        </label>
-        <textarea
-          value={config.conversation_strategy}
-          onChange={(e) => onChange('conversation_strategy', e.target.value)}
-          rows={10}
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono text-sm resize-none"
-          placeholder="Escribí las instrucciones de cómo debe comportarse..."
-        />
-        <p className="mt-2 text-xs text-gray-500">
-          Cada línea se presenta como una instrucción separada al asistente
-        </p>
-      </div>
-
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-        <div className="flex gap-3">
-          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-1">Consejos</h4>
-            <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
-              <li>• Usá instrucciones claras y directas</li>
-              <li>• Evitá contradicciones entre instrucciones</li>
-              <li>• Priorizá la naturalidad de la conversación</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Trigger Tab Component
-function TriggerTab({
-  config,
-  onChange,
-}: {
-  config: PromptConfig;
-  onChange: (key: string, value: unknown) => void;
-}) {
-  const configRecord = config as Record<string, string>;
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-          Disparador Inteligente
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          La IA analiza cada mensaje entrante y decide si iniciar la conversación basándose en estos criterios
-        </p>
-      </div>
-
-      {/* KEYWORDS PRIORITARIAS - Nueva sección destacada */}
-      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-2 border-emerald-200 dark:border-emerald-700">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <div>
-            <h4 className="font-semibold text-emerald-800 dark:text-emerald-200 mb-1">
-              🎯 Palabras Clave Prioritarias
-            </h4>
-            <p className="text-sm text-emerald-700 dark:text-emerald-300">
-              Si el mensaje contiene alguna de estas palabras, se activa <strong>automáticamente sin usar IA</strong>.
-              Incluye <strong>tolerancia a errores tipográficos</strong> (ej: "flora" → "flota", "sprintr" → "sprinter").
+        {/* Mensaje de completar */}
+        <div>
+          <Label hint="Cuando obtiene todos los datos">Mensaje al completar</Label>
+          <Textarea
+            value={config.mission_complete_message || ''}
+            onChange={(v) => onChange('mission_complete_message', v)}
+            rows={6}
+            placeholder="Gracias por la info, un asesor te contacta..."
+          />
+          <div className="mt-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              <strong>{missionFields.length}</strong> campos activos
             </p>
           </div>
         </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-2">
-            Keywords (separar con coma)
-          </label>
-          <textarea
-            value={configRecord.trigger_keywords || ''}
-            onChange={(e) => onChange('trigger_keywords', e.target.value)}
-            rows={2}
-            className="w-full px-4 py-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none text-sm font-mono"
-            placeholder="flota, sprinter, furgon, utilitario, master, ducato, daily, vito"
-          />
-          <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
-            Ejemplo: Si escribís "flota", también detectará "flora", "flots", "flotta", etc.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Criterio Principal de Aceptación (para IA)
-            </label>
-            <textarea
-              value={configRecord.trigger_criteria || ''}
-              onChange={(e) => onChange('trigger_criteria', e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-sm"
-              placeholder="Descripción de qué debe cumplir el mensaje para iniciar..."
-            />
-            <p className="mt-1 text-xs text-gray-500">Solo se usa si NO hay match con keywords prioritarias</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Instrucciones de Contexto Adicionales
-            </label>
-            <textarea
-              value={configRecord.trigger_context_instructions || ''}
-              onChange={(e) => onChange('trigger_context_instructions', e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-sm font-mono"
-              placeholder="Instrucciones adicionales..."
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Ejemplos Positivos (separar con |)
-            </label>
-            <textarea
-              value={configRecord.trigger_examples_positive || ''}
-              onChange={(e) => onChange('trigger_examples_positive', e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-sm"
-              placeholder="hola busco depto|quiero alquilar|..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Ejemplos Negativos (separar con |)
-            </label>
-            <textarea
-              value={configRecord.trigger_examples_negative || ''}
-              onChange={(e) => onChange('trigger_examples_negative', e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-sm"
-              placeholder="spam|publicidad|..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Números VIP (separar con coma)
-            </label>
-            <input
-              type="text"
-              value={configRecord.trigger_vip_phones || ''}
-              onChange={(e) => onChange('trigger_vip_phones', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-              placeholder="5491112345678, 5491187654321"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Duración de Ignorados (horas)
-            </label>
-            <input
-              type="number"
-              value={configRecord.trigger_ignore_duration_hours || '168'}
-              onChange={(e) => onChange('trigger_ignore_duration_hours', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-sm"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Info box sobre el flujo */}
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-        <div className="flex gap-3">
-          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-1">Flujo de decisión</h4>
-            <ol className="text-sm text-blue-700 dark:text-blue-400 space-y-1 list-decimal list-inside">
-              <li><strong>Número VIP</strong> → Activa inmediatamente</li>
-              <li><strong>Lista de Ignorados</strong> → No activa</li>
-              <li><strong>Keyword Prioritaria</strong> → Activa inmediatamente (con fuzzy matching)</li>
-              <li><strong>Análisis IA</strong> → Decide según criterios y ejemplos</li>
-            </ol>
-          </div>
-        </div>
       </div>
     </div>
   );
 }
 
-// Definición de columnas para CustomTable de ignorados
-const ignoredContactsColumns = buildColumnsFromDefinition({
-  phone: { type: 'text', header: 'TELÉFONO', width: 150 },
-  reason: { type: 'text', header: 'RAZÓN', width: 200 },
-  first_message: { type: 'text', header: 'PRIMER MENSAJE', width: 250 },
-  ignored_at: { type: 'date', header: 'IGNORADO', width: 140 },
-  time_remaining: { type: 'badge', header: 'EXPIRA EN', width: 120 },
+function StrategyTab({ config, onChange }: { config: PromptConfig; onChange: (k: string, v: unknown) => void }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <Lightbulb className="w-5 h-5 text-amber-500" />
+          Estrategia de Conversación
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">Instrucciones de cómo debe interactuar</p>
+      </div>
+
+      <div>
+        <Label hint="Cada línea = una instrucción">Instrucciones</Label>
+        <Textarea
+          value={config.conversation_strategy}
+          onChange={(v) => onChange('conversation_strategy', v)}
+          rows={16}
+          mono
+          placeholder="1. Saludá de forma cálida&#10;2. Preguntá el nombre..."
+        />
+      </div>
+
+      <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          <strong>Tip:</strong> Priorizá instrucciones claras y evitá contradicciones.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function KeywordsPills({ keywords, onChange }: { keywords: string; onChange: (v: string) => void }) {
+  const [input, setInput] = useState('');
+  const list = keywords.split(',').map(k => k.trim()).filter(Boolean);
+
+  const add = () => {
+    const k = input.trim().toLowerCase();
+    if (k && !list.includes(k)) { onChange([...list, k].join(',')); setInput(''); }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())}
+          placeholder="Agregar..."
+          className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-emerald-500/50 bg-background focus:ring-2 focus:ring-emerald-500/20"
+        />
+        <button onClick={add} disabled={!input.trim()} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium disabled:opacity-50">
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+      {list.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {list.map(k => (
+            <span key={k} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600 text-white text-xs">
+              {k}
+              <button onClick={() => onChange(list.filter(x => x !== k).join(','))} className="hover:bg-white/20 rounded">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TriggerTab({ config, onChange }: { config: PromptConfig; onChange: (k: string, v: unknown) => void }) {
+  const c = config as Record<string, string>;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <Zap className="w-5 h-5 text-emerald-500" />
+          Disparador Inteligente
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">Cuándo debe activarse la IA</p>
+      </div>
+
+      {/* Keywords - Destacado */}
+      <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/30">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-4 h-4 text-emerald-600" />
+          <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">Keywords Prioritarias</span>
+        </div>
+        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-3">
+          Match instantáneo sin IA. Incluye fuzzy matching (flora→flota).
+        </p>
+        <KeywordsPills keywords={c.trigger_keywords || ''} onChange={(v) => onChange('trigger_keywords', v)} />
+      </div>
+
+      {/* Grid de configuración */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <Label hint="Si no hay keyword match">Criterio IA</Label>
+          <Textarea value={c.trigger_criteria || ''} onChange={(v) => onChange('trigger_criteria', v)} rows={4} placeholder="Iniciar si..." />
+        </div>
+        <div>
+          <Label>Contexto adicional</Label>
+          <Textarea value={c.trigger_context_instructions || ''} onChange={(v) => onChange('trigger_context_instructions', v)} rows={4} mono placeholder="Instrucciones extra..." />
+        </div>
+        <div>
+          <Label hint="Separar con |">Ejemplos positivos</Label>
+          <Textarea value={c.trigger_examples_positive || ''} onChange={(v) => onChange('trigger_examples_positive', v)} rows={3} placeholder="busco furgón|quiero sprinter" />
+        </div>
+        <div>
+          <Label hint="Separar con |">Ejemplos negativos</Label>
+          <Textarea value={c.trigger_examples_negative || ''} onChange={(v) => onChange('trigger_examples_negative', v)} rows={3} placeholder="spam|publicidad" />
+        </div>
+        <div>
+          <Label hint="Separar con coma">Números VIP</Label>
+          <Input value={c.trigger_vip_phones || ''} onChange={(v) => onChange('trigger_vip_phones', v)} placeholder="5491112345678, ..." />
+        </div>
+        <div>
+          <Label>Duración ignorados (horas)</Label>
+          <Input value={c.trigger_ignore_duration_hours || '168'} onChange={(v) => onChange('trigger_ignore_duration_hours', v)} type="number" />
+        </div>
+      </div>
+
+      <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+          <strong>Flujo:</strong> VIP → Ignorados → Keywords → IA
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const ignoredColumns = buildColumnsFromDefinition({
+  phone: { type: 'text', header: 'Teléfono', width: 130 },
+  reason: { type: 'text', header: 'Razón', width: 150 },
+  first_message: { type: 'text', header: 'Mensaje', width: 180 },
+  time_remaining: { type: 'badge', header: 'Expira', width: 80 },
 });
 
-// Ignored Tab Component
 function IgnoredTab() {
   const [contacts, setContacts] = useState<IgnoredContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [stats, setStats] = useState({ total: 0, active: 0, expired: 0 });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const fetchContacts = useCallback(async () => {
+  const fetch_ = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/crm-whatsapp/ignored-contacts');
-      const data = await response.json();
-      if (data.success) {
-        setContacts(data.data);
-        setStats(data.stats);
-      }
-    } catch (error) {
-      console.error('Error cargando ignorados:', error);
-    } finally {
-      setLoading(false);
-    }
+      const r = await fetch('/api/crm-whatsapp/ignored-contacts');
+      const d = await r.json();
+      if (d.success) { setContacts(d.data); setStats(d.stats); }
+    } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => {
-    fetchContacts();
-  }, [fetchContacts]);
+  useEffect(() => { fetch_(); }, [fetch_]);
 
-  const getTimeRemaining = (expiresAt: string | null) => {
-    if (!expiresAt) return 'Permanente';
-    const now = new Date();
-    const expires = new Date(expiresAt);
-    if (expires <= now) return 'Expirado';
-    const diffMs = expires.getTime() - now.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays > 0) return `${diffDays}d ${diffHours % 24}h`;
-    return `${diffHours}h`;
+  const getRemaining = (exp: string | null) => {
+    if (!exp) return 'Perm';
+    const diff = new Date(exp).getTime() - Date.now();
+    if (diff <= 0) return 'Exp';
+    const h = Math.floor(diff / 3600000);
+    return h >= 24 ? `${Math.floor(h / 24)}d` : `${h}h`;
   };
 
-  const handleDeleteAll = async () => {
-    if (!confirm('¿Estás seguro de que querés borrar TODOS los contactos ignorados? Esto permitirá que la IA les responda nuevamente.')) {
-      return;
-    }
+  const deleteAll = async () => {
     setDeleting('all');
     try {
-      const response = await fetch('/api/crm-whatsapp/ignored-contacts?action=all', {
-        method: 'PUT',
-      });
-      const data = await response.json();
-      if (data.success) {
-        await fetchContacts();
-      }
-    } catch (error) {
-      console.error('Error borrando todos:', error);
-    } finally {
-      setDeleting(null);
-    }
+      const r = await fetch('/api/crm-whatsapp/ignored-contacts?action=all', { method: 'PUT' });
+      if ((await r.json()).success) { await fetch_(); setShowDeleteModal(false); setShowSuccessModal(true); }
+    } finally { setDeleting(null); }
   };
 
-  const handleDeleteExpired = async () => {
-    setDeleting('expired');
-    try {
-      const response = await fetch('/api/crm-whatsapp/ignored-contacts?action=expired', {
-        method: 'PUT',
-      });
-      const data = await response.json();
-      if (data.success) {
-        await fetchContacts();
-      }
-    } catch (error) {
-      console.error('Error limpiando expirados:', error);
-    } finally {
-      setDeleting(null);
-    }
+  const deleteExpired = async () => {
+    setDeleting('exp');
+    try { await fetch('/api/crm-whatsapp/ignored-contacts?action=expired', { method: 'PUT' }); await fetch_(); }
+    finally { setDeleting(null); }
   };
 
-  const tableData = contacts.filter(c => !c.is_expired).map(contact => ({
-    id: contact.id.toString(),
-    phone: contact.phone,
-    reason: contact.reason || '-',
-    first_message: contact.first_message || '-',
-    ignored_at: contact.ignored_at,
-    time_remaining: getTimeRemaining(contact.expires_at),
+  const data = contacts.filter(c => !c.is_expired).map(c => ({
+    id: String(c.id), phone: c.phone, reason: c.reason || '-',
+    first_message: c.first_message || '-', time_remaining: getRemaining(c.expires_at),
   }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-            Contactos Ignorados
-          </h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {stats.active} activos de {stats.total} total
-          </p>
+          <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+            <ShieldOff className="w-5 h-5 text-rose-500" />
+            Ignorados
+            <span className="text-sm font-normal text-muted-foreground">({stats.active})</span>
+          </h2>
         </div>
-
-        {/* Botones de acción */}
-        <div className="flex items-center gap-2">
+        <div className="flex gap-1.5">
           {stats.expired > 0 && (
-            <button
-              onClick={handleDeleteExpired}
-              disabled={deleting !== null}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded-lg border border-amber-200 dark:border-amber-700 transition-colors disabled:opacity-50"
-            >
-              {deleting === 'expired' ? (
-                <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-              Limpiar {stats.expired} expirados
+            <button onClick={deleteExpired} disabled={!!deleting}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 disabled:opacity-50">
+              <Clock className="w-3.5 h-3.5" />{stats.expired} exp
             </button>
           )}
-
-          <button
-            onClick={handleDeleteAll}
-            disabled={deleting !== null || stats.active === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg border border-red-200 dark:border-red-700 transition-colors disabled:opacity-50"
-          >
-            {deleting === 'all' ? (
-              <div className="w-4 h-4 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin" />
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            )}
-            Borrar todos
+          <button onClick={() => setShowDeleteModal(true)} disabled={!!deleting || stats.active === 0}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 text-white disabled:opacity-50">
+            <Trash2 className="w-3.5 h-3.5" />Borrar
           </button>
         </div>
       </div>
 
+      <ConfirmModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} onConfirm={deleteAll}
+        title="Borrar todos" message={`¿Eliminar ${stats.active} contactos?`} confirmText="Sí" variant="danger" loading={deleting === 'all'} />
+      <ConfirmModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)}
+        title="Listo" message="Eliminados." confirmText="OK" variant="success" showCancel={false} onConfirm={() => setShowSuccessModal(false)} />
+
       {stats.active === 0 ? (
-        <div className="p-8 text-center rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-          <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-1">¡Lista vacía!</h4>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            No hay contactos ignorados activos. Todos los mensajes serán evaluados por la IA.
-          </p>
+        <div className="p-8 text-center rounded-lg border border-dashed border-border">
+          <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500 mb-2" />
+          <p className="text-sm text-muted-foreground">Lista vacía</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '400px' }}>
-          <CustomTable
-            data={tableData}
-            columnsDef={ignoredContactsColumns}
-            pageSize={50}
-            loading={loading}
-            showFiltersToolbar={true}
-            containerHeight="100%"
-            rowHeight={28}
-            onRefresh={fetchContacts}
-          />
+        <div className="rounded-lg border border-border overflow-hidden" style={{ height: '350px' }}>
+          <CustomTable data={data} columnsDef={ignoredColumns} pageSize={50} loading={loading} containerHeight="100%" rowHeight={32} onRefresh={fetch_} />
         </div>
       )}
-
-      {/* Info box */}
-      <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-        <div className="flex gap-3">
-          <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-1">¿Cómo funciona?</h4>
-            <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
-              <li>• Cuando la IA decide NO iniciar conversación, el contacto se agrega aquí</li>
-              <li>• Los contactos ignorados NO reciben respuestas automáticas</li>
-              <li>• La duración se configura en el tab "Disparador"</li>
-              <li>• Borrar un contacto permite que la IA le responda nuevamente</li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
 
-// Rules Tab Component
-function RulesTab({
-  config,
-  onChange,
-}: {
-  config: PromptConfig;
-  onChange: (key: string, value: unknown) => void;
-}) {
+function RulesTab({ config, onChange }: { config: PromptConfig; onChange: (k: string, v: unknown) => void }) {
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-          Reglas del Asistente
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Reglas que definen el comportamiento fundamental
-        </p>
+        <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+          <Lock className="w-5 h-5 text-indigo-500" />
+          Reglas Inquebrantables
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">Máxima prioridad en todas las conversaciones</p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Reglas de Comportamiento
-        </label>
-        <textarea
+        <Label>Reglas de comportamiento</Label>
+        <Textarea
           value={config.unbreakable_rules || ''}
-          onChange={(e) => onChange('unbreakable_rules', e.target.value)}
-          rows={12}
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono text-sm resize-none"
-          placeholder="Reglas que el asistente debe seguir siempre..."
+          onChange={(v) => onChange('unbreakable_rules', v)}
+          rows={18}
+          mono
+          placeholder="1. Mensajes cortos&#10;2. Nunca revelar que sos IA..."
         />
       </div>
 
-      <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800">
-        <div className="flex gap-3">
-          <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div>
-            <h4 className="font-medium text-amber-800 dark:text-amber-300 mb-1">Importante</h4>
-            <p className="text-sm text-amber-700 dark:text-amber-400">
-              Modificá estas reglas con cuidado. Afectan directamente cómo responde el asistente.
-            </p>
-          </div>
-        </div>
+      <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          <strong>Importante:</strong> Estas reglas tienen máxima prioridad. Cambialas con cuidado.
+        </p>
       </div>
     </div>
   );
