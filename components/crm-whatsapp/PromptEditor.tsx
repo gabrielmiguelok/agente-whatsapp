@@ -140,6 +140,7 @@ export function PromptEditor({ config, loading, onSave, onReload }: PromptEditor
         'trigger_vip_phones',
         'trigger_context_instructions',
         'trigger_ignore_duration_hours',
+        'trigger_keywords',
       ];
       for (const key of editableKeys) {
         const value = localConfig[key as keyof PromptConfig];
@@ -682,11 +683,47 @@ function TriggerTab({
         </p>
       </div>
 
+      {/* KEYWORDS PRIORITARIAS - Nueva sección destacada */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-2 border-emerald-200 dark:border-emerald-700">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <h4 className="font-semibold text-emerald-800 dark:text-emerald-200 mb-1">
+              🎯 Palabras Clave Prioritarias
+            </h4>
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">
+              Si el mensaje contiene alguna de estas palabras, se activa <strong>automáticamente sin usar IA</strong>.
+              Incluye <strong>tolerancia a errores tipográficos</strong> (ej: "flora" → "flota", "sprintr" → "sprinter").
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-2">
+            Keywords (separar con coma)
+          </label>
+          <textarea
+            value={configRecord.trigger_keywords || ''}
+            onChange={(e) => onChange('trigger_keywords', e.target.value)}
+            rows={2}
+            className="w-full px-4 py-3 rounded-xl border-2 border-emerald-300 dark:border-emerald-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none text-sm font-mono"
+            placeholder="flota, sprinter, furgon, utilitario, master, ducato, daily, vito"
+          />
+          <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+            Ejemplo: Si escribís "flota", también detectará "flora", "flots", "flotta", etc.
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Criterio Principal de Aceptación
+              Criterio Principal de Aceptación (para IA)
             </label>
             <textarea
               value={configRecord.trigger_criteria || ''}
@@ -695,6 +732,7 @@ function TriggerTab({
               className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-sm"
               placeholder="Descripción de qué debe cumplir el mensaje para iniciar..."
             />
+            <p className="mt-1 text-xs text-gray-500">Solo se usa si NO hay match con keywords prioritarias</p>
           </div>
 
           <div>
@@ -764,6 +802,24 @@ function TriggerTab({
           </div>
         </div>
       </div>
+
+      {/* Info box sobre el flujo */}
+      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
+        <div className="flex gap-3">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-1">Flujo de decisión</h4>
+            <ol className="text-sm text-blue-700 dark:text-blue-400 space-y-1 list-decimal list-inside">
+              <li><strong>Número VIP</strong> → Activa inmediatamente</li>
+              <li><strong>Lista de Ignorados</strong> → No activa</li>
+              <li><strong>Keyword Prioritaria</strong> → Activa inmediatamente (con fuzzy matching)</li>
+              <li><strong>Análisis IA</strong> → Decide según criterios y ejemplos</li>
+            </ol>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -781,6 +837,7 @@ const ignoredContactsColumns = buildColumnsFromDefinition({
 function IgnoredTab() {
   const [contacts, setContacts] = useState<IgnoredContact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [stats, setStats] = useState({ total: 0, active: 0, expired: 0 });
 
   const fetchContacts = useCallback(async () => {
@@ -815,6 +872,43 @@ function IgnoredTab() {
     return `${diffHours}h`;
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm('¿Estás seguro de que querés borrar TODOS los contactos ignorados? Esto permitirá que la IA les responda nuevamente.')) {
+      return;
+    }
+    setDeleting('all');
+    try {
+      const response = await fetch('/api/crm-whatsapp/ignored-contacts?action=all', {
+        method: 'PUT',
+      });
+      const data = await response.json();
+      if (data.success) {
+        await fetchContacts();
+      }
+    } catch (error) {
+      console.error('Error borrando todos:', error);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleDeleteExpired = async () => {
+    setDeleting('expired');
+    try {
+      const response = await fetch('/api/crm-whatsapp/ignored-contacts?action=expired', {
+        method: 'PUT',
+      });
+      const data = await response.json();
+      if (data.success) {
+        await fetchContacts();
+      }
+    } catch (error) {
+      console.error('Error limpiando expirados:', error);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const tableData = contacts.filter(c => !c.is_expired).map(contact => ({
     id: contact.id.toString(),
     phone: contact.phone,
@@ -826,26 +920,93 @@ function IgnoredTab() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-          Contactos Ignorados
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {stats.active} activos de {stats.total} total
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+            Contactos Ignorados
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {stats.active} activos de {stats.total} total
+          </p>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="flex items-center gap-2">
+          {stats.expired > 0 && (
+            <button
+              onClick={handleDeleteExpired}
+              disabled={deleting !== null}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded-lg border border-amber-200 dark:border-amber-700 transition-colors disabled:opacity-50"
+            >
+              {deleting === 'expired' ? (
+                <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              Limpiar {stats.expired} expirados
+            </button>
+          )}
+
+          <button
+            onClick={handleDeleteAll}
+            disabled={deleting !== null || stats.active === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg border border-red-200 dark:border-red-700 transition-colors disabled:opacity-50"
+          >
+            {deleting === 'all' ? (
+              <div className="w-4 h-4 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            )}
+            Borrar todos
+          </button>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '400px' }}>
-        <CustomTable
-          data={tableData}
-          columnsDef={ignoredContactsColumns}
-          pageSize={50}
-          loading={loading}
-          showFiltersToolbar={true}
-          containerHeight="100%"
-          rowHeight={28}
-          onRefresh={fetchContacts}
-        />
+      {stats.active === 0 ? (
+        <div className="p-8 text-center rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+          <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-1">¡Lista vacía!</h4>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            No hay contactos ignorados activos. Todos los mensajes serán evaluados por la IA.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden" style={{ height: '400px' }}>
+          <CustomTable
+            data={tableData}
+            columnsDef={ignoredContactsColumns}
+            pageSize={50}
+            loading={loading}
+            showFiltersToolbar={true}
+            containerHeight="100%"
+            rowHeight={28}
+            onRefresh={fetchContacts}
+          />
+        </div>
+      )}
+
+      {/* Info box */}
+      <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+        <div className="flex gap-3">
+          <svg className="w-5 h-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-1">¿Cómo funciona?</h4>
+            <ul className="text-sm text-gray-500 dark:text-gray-400 space-y-1">
+              <li>• Cuando la IA decide NO iniciar conversación, el contacto se agrega aquí</li>
+              <li>• Los contactos ignorados NO reciben respuestas automáticas</li>
+              <li>• La duración se configura en el tab "Disparador"</li>
+              <li>• Borrar un contacto permite que la IA le responda nuevamente</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );
